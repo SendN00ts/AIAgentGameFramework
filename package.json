@@ -4,7 +4,8 @@
   "description": "Twitter bot that posts wisdom",
   "main": "dist/index.js",
   "scripts": {
-    "build": "tsc",
+    "prebuild": "ls -la && echo 'Current directory contents:'",
+    "build": "tsc --listFiles",
     "start": "node dist/index.js"
   },
   "dependencies": {
