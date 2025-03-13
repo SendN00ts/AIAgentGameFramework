@@ -8,8 +8,8 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@virtuals-protocol/game": "^0.4.0",
-    "@virtuals-protocol/game-twitter-plugin": "^0.4.0",
+    "@virtuals-protocol/game": "0.1.9",
+    "@virtuals-protocol/game-twitter-plugin": "0.1.8",
     "dotenv": "^16.3.1",
     "typescript": "^5.2.2"
   }
