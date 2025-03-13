@@ -1,0 +1,9 @@
+"scripts": {
+  "build": "tsc",
+  "start": "node dist/index.js"
+},
+"dependencies": {
+  "@virtuals-protocol/game": "^1.0.0",
+  "@virtuals-protocol/game-twitter-plugin": "^1.0.0",
+  "dotenv": "^16.0.0"
+}
