@@ -4,7 +4,9 @@ import { ImageGenPlugin } from './plugins/imageGen';
 import dotenv from "dotenv";
 dotenv.config();
 
-// Verify required environment variables
+console.log("API_KEY exists:", !!process.env.API_KEY);
+console.log("OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+
 if (!process.env.API_KEY) {
     throw new Error('API_KEY is required in environment variables');
 }

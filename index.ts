@@ -38,6 +38,10 @@ async function main() {
     console.log("Initializing Wisdom Twitter Bot...");
     await wisdom_agent.init();
     console.log("Wisdom Twitter Bot initialized successfully!");
+
+console.log("Available functions:", wisdom_agent.workers.flatMap(w => 
+    w.functions.map(f => f.name)
+  ));
     
     // Start the first step
     runAgentWithRetry();
