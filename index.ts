@@ -3,14 +3,14 @@ import { wisdom_agent } from './agent';
 // Maximum number of retries for API errors
 const MAX_RETRIES = 3;
 // Time to wait between steps (in milliseconds)
-const STEP_DELAY = 5 * 60 * 1000; 
+const STEP_DELAY = 300 * 60 * 1000; 
 // Time to wait after an error (in milliseconds)
 const ERROR_RETRY_DELAY = 3 * 60 * 1000; 
 
 async function runAgentWithRetry(retryCount = 0) {
   try {
     // Run a single step
-    await wisdom_agent.step({ verbose: true });
+    await wisdom_agent.run(300 * 60, { verbose: true });
     console.log(`Step completed successfully. Waiting ${STEP_DELAY/60000} minutes until next step...`);
     
     // Schedule the next step after a delay

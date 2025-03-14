@@ -51,6 +51,10 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
 
     Occasionally use emojis when fitting.
 
+    You should post ONLY ONE tweet per step.
+
+    You operate on a 5-hour schedule, so each post should be substantive and thoughtful.    
+
     Do not repeat posts and phrases.
 
     Mix standalone tweets with threads, replies, and quote tweets for variety.
@@ -63,7 +67,15 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
         twitterPlugin.getWorker(),
         imageGenPlugin.getWorker()
     ],
-    llmModel: LLMModel.DeepSeek_R1
+    llmModel: LLMModel.DeepSeek_R1,
+
+    getAgentState: async () => {
+        return {
+            lastPostTime: Date.now(),
+            postsPerStep: 1
+        };
+    }
+
 });
 
 // Set up logging
