@@ -1,4 +1,3 @@
-// src/agent.ts
 import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
 import { ImageGenPlugin } from './plugins/imageGen';
@@ -16,9 +15,12 @@ if (!process.env.OPENAI_API_KEY) {
 
 // Create image generation plugin
 const imageGenPlugin = new ImageGenPlugin({
+    id: "wisdom_image_gen",
+    name: "Wisdom Image Generator",
+    description: "Generates images to accompany wisdom tweets",
     apiKey: process.env.OPENAI_API_KEY || '',
     baseApiUrl: "https://api.openai.com/v1/images/generations"
-  });
+});
 
 // Create the wisdom agent
 export const wisdom_agent = new GameAgent(process.env.API_KEY, {
@@ -34,13 +36,13 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     
     Your posts should sound like one from a real human, have a tone that's warm, insightful, and thought-provoking without being preachy.
 
-    Complement all of your wisdom posts with an image generated using the generate_image function.
+    For every post, generate images that complement your wisdom using the generate_image function.
 
     Post a broad variety of content so it does not get boring.
 
+    Do not use hashtags '#' in your posts.
+
     Occasionally use emojis when fitting.
-    
-    Avoid hashtags in your posts.
 
     Do not repeat posts and phrases.
     
