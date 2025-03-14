@@ -1,7 +1,7 @@
 // src/agent.ts
 import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
-import { ImageGenPlugin } from "./plugins/imageGen";
+import { ImageGenPlugin } from "./plugins/imageGen/";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -14,12 +14,12 @@ if (!process.env.OPENAI_API_KEY) {
     throw new Error('OPENAI_API_KEY is required in environment variables');
 }
 
-// Create image generation plugin
 const imageGenPlugin = new ImageGenPlugin({
-    id: "wisdom_image_gen",
-    name: "Wisdom Image Generator",
-    description: "Generates images to accompany wisdom tweets",
-    apiKey: process.env.OPENAI_API_KEY
+  id: "wisdom_image_gen",
+  name: "Wisdom Image Generator",
+  description: "Generates images to accompany wisdom tweets",
+  apiKey: process.env.OPENAI_API_KEY || '',
+  baseApiUrl: "https://api.openai.com/v1/images/generations"
 });
 
 // Create the wisdom agent
