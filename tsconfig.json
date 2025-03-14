@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "sourceMap": true
   },
-  "include": ["*.ts"],
+  "include": ["*.ts", "plugins/twitterPlugin/twitterPlugin.ts", "plugins/imageGen/imageGenPlugin.ts"],
   "exclude": ["node_modules", "dist"]
 }

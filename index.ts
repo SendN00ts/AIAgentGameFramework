@@ -1,52 +1,63 @@
-// src/index.ts
-import { wisdom_agent } from './agent';
+// src/agent.ts
+import { GameAgent, LLMModel } from "@virtuals-protocol/game";
+import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
+import { ImageGenPlugin } from "./plugins/imageGen";
+import dotenv from "dotenv";
+dotenv.config();
 
-// Maximum number of retries for API errors
-const MAX_RETRIES = 3;
-// Time to wait between steps (in milliseconds)
-const STEP_DELAY = 5 * 60 * 1000; // 30 minutes
-// Time to wait after an error (in milliseconds)
-const ERROR_RETRY_DELAY = 3 * 60 * 1000; // 5 minutes
-
-async function runAgentWithRetry(retryCount = 0) {
-  try {
-    // Run a single step
-    await wisdom_agent.step({ verbose: true });
-    console.log(`Step completed successfully. Waiting ${STEP_DELAY/60000} minutes until next step...`);
-    
-    // Schedule the next step after a delay
-    setTimeout(() => runAgentWithRetry(), STEP_DELAY);
-    
-  } catch (error) {
-    console.error(`Error running agent step:`, error);
-    
-    if (retryCount < MAX_RETRIES) {
-      const nextRetry = retryCount + 1;
-      console.log(`Retry attempt ${nextRetry}/${MAX_RETRIES} in ${ERROR_RETRY_DELAY/60000} minutes...`);
-      
-      // Wait longer after an error before retrying
-      setTimeout(() => runAgentWithRetry(nextRetry), ERROR_RETRY_DELAY);
-    } else {
-      console.error(`Maximum retry attempts (${MAX_RETRIES}) reached. Please check your configuration and try again later.`);
-      process.exit(1);
-    }
-  }
+// Verify required environment variables
+if (!process.env.API_KEY) {
+    throw new Error('API_KEY is required in environment variables');
 }
 
-async function main() {
-  try {
-    // Initialize the agent
-    console.log("Initializing Wisdom Twitter Bot...");
-    await wisdom_agent.init();
-    console.log("Wisdom Twitter Bot initialized successfully!");
-    
-    // Start the first step
-    runAgentWithRetry();
-    
-  } catch (error) {
-    console.error("Failed to initialize agent:", error);
-    process.exit(1);
-  }
+if (!process.env.OPENAI_API_KEY) {
+    throw new Error('OPENAI_API_KEY is required in environment variables');
 }
 
-main();
+// Create image generation plugin
+const imageGenPlugin = new ImageGenPlugin({
+    id: "wisdom_image_gen",
+    name: "Wisdom Image Generator",
+    description: "Generates images to accompany wisdom tweets",
+    apiKey: process.env.OPENAI_API_KEY
+});
+
+// Create the wisdom agent
+export const wisdom_agent = new GameAgent(process.env.API_KEY, {
+    name: "AIleen",
+    goal: "Share valuable wisdom and knowledge with images on Twitter to educate and inspire followers",
+    description: `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
+    
+    Your responsibilities:
+    1. Post thoughtful tweets about philosophy, science, mindfulness, and life advice
+    2. Create engaging content with relevant images when appropriate
+    3. Reply to mentions with additional insights when appropriate
+    4. Share knowledge that is practical and applicable to everyday life
+    
+    Your posts should sound like one from a real human, have a tone that's warm, insightful, and thought-provoking without being preachy.
+
+    When suitable, generate images that complement your wisdom posts using the generate_image function.
+
+    Post a broad variety of content so it does not get boring.
+
+    Avoid using hashtags.
+
+    Occasionally use emojis when fitting.
+
+    Do not repeat posts and phrases.
+    
+    Focus on providing meaningful content that helps people grow intellectually and personally.`,
+
+    workers: [
+        twitterPlugin.getWorker(),
+        imageGenPlugin.getWorker()
+    ],
+    llmModel: LLMModel.DeepSeek_R1
+});
+
+// Set up logging
+wisdom_agent.setLogger((agent, msg) => {
+    console.log(`🧠 [${agent.name}]`);
+    console.log(msg);
+    console.log("------------------------\n");
+});
