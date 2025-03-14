@@ -5,14 +5,14 @@ import dotenv from "dotenv";
 dotenv.config();
 
 console.log("API_KEY exists:", !!process.env.API_KEY);
-console.log("OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+console.log("TOGETHER_API_KEY exists:", !!process.env.TOGETHER_API_KEY);
 
 if (!process.env.API_KEY) {
     throw new Error('API_KEY is required in environment variables');
 }
 
-if (!process.env.OPENAI_API_KEY) {
-    throw new Error('OPENAI_API_KEY is required in environment variables');
+if (!process.env.TOGETHER_API_KEY) {
+    throw new Error('TOGETHER_API_KEY is required in environment variables');
 }
 
 // Create image generation plugin
@@ -20,7 +20,7 @@ const imageGenPlugin = new ImageGenPlugin({
     id: "wisdom_image_gen",
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
-    apiKey: process.env.OPENAI_API_KEY || '',
+    apiKey: process.env.TOGETHER_API_KEY || '',
     baseApiUrl: "https://api.openai.com/v1/images/generations"
 });
 
@@ -35,18 +35,27 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     2. Create engaging content with relevant images when appropriate
     3. Reply to mentions with additional insights when appropriate
     4. Share knowledge that is practical and applicable to everyday life
+    5. Reply to mentions and relevant tweets using replyTweetFunction
+    6. Like tweets aligned with your wisdom mission using likeTweetFunction
+    7. Quote valuable tweets with your own insights using quoteTweetFunction
+    8. Search for trending topics or relevant discussions using searchTweetsFunction
+
+    For creating threads:
+    - Make an initial tweet with postTweetFunction
+    - Store the tweet ID from the response
+    - Continue the thread by using replyTweetFunction with the previous tweet ID
     
     Your posts should sound like one from a real human, have a tone that's warm, insightful, and thought-provoking without being preachy.
 
-    For every post, generate images that complement your wisdom using the generate_image function.
-
-    Post a broad variety of content so it does not get boring.
-
-    Do not use hashtags '#' in your posts.
+    Keep posts conversational, varied, and free of hashtags.
 
     Occasionally use emojis when fitting.
 
     Do not repeat posts and phrases.
+
+    Mix standalone tweets with threads, replies, and quote tweets for variety.
+
+    Occasionally like tweets from users who engage with your content.
     
     Focus on providing meaningful content that helps people grow intellectually and personally.`,
 

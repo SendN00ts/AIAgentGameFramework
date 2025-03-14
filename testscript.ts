@@ -2,7 +2,7 @@
 import dotenv from 'dotenv';
 dotenv.config();
 
-console.log("OPENAI_API_KEY exists:", !!process.env.OPENAI_API_KEY);
+console.log("TOGETHER_API_KEY exists:", !!process.env.TOGETHER_API_KEY);
 
 // Test import
 try {
@@ -10,7 +10,7 @@ try {
   console.log("Import successful");
   
   const plugin = new ImageGenPlugin({
-    apiKey: process.env.OPENAI_API_KEY || ''
+    apiKey: process.env.TOGETHER_API_KEY || ''
   });
   console.log("Plugin created");
 } catch (error) {
