@@ -21,7 +21,7 @@ const imageGenPlugin = new ImageGenPlugin({
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
     apiKey: process.env.TOGETHER_API_KEY || '',
-    baseApiUrl: "https://api.openai.com/v1/images/generations"
+    baseApiUrl: "https://api.together.xyz/v1/images/generations"
 });
 
 // Create the wisdom agent
@@ -75,7 +75,6 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
             postsPerStep: 1
         };
     }
-
 });
 
 // Set up logging
