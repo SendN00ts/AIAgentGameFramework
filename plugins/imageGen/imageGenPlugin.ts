@@ -76,6 +76,9 @@ class ImageGenPlugin {
         },
       ],
       executable: async (args, logger) => {
+        console.log("🖼️ IMAGE GENERATION STARTED");
+  console.log("🔑 API KEY EXISTS:", !!this.apiKey);
+  console.log("🔍 PROMPT:", args.prompt);
         try {
           // Validate required arguments
           if (!args.prompt) {
@@ -111,6 +114,8 @@ class ImageGenPlugin {
             body: JSON.stringify(payload),
           });
 
+          console.log("📡 API RESPONSE STATUS:", response.status);
+
           if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
           }
@@ -120,6 +125,8 @@ class ImageGenPlugin {
 
           const message = `Successfully generated image. The generated image URL is: ${imageUrl}`;
           logger(message);
+
+          console.log("✅ IMAGE URL:", imageUrl);
 
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Done,

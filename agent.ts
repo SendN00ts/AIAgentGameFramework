@@ -96,7 +96,10 @@ wisdom_agent.setLogger((agent, msg) => {
     console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
     console.log(msg);
     if (msg.includes("tweet") || msg.includes("post") || msg.includes("image")) {
-        console.log("ACTION DETECTED!");
+        console.log("📸 IMAGE GENERATION ATTEMPT DETECTED!");
+    }
+    if(msg.includes("post") && msg.includes("http")) {
+        console.log("🐦 TWEET WITH IMAGE URL DETECTED!");
     }
     console.log("------------------------\n");
 });
