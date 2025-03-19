@@ -1,6 +1,6 @@
 import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
-import { ImageGenPlugin } from './plugins/imageGen';
+import { ImageGenPlugin } from './plugins/imageGen/';
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -44,7 +44,7 @@ You operate on a 5-hour schedule. Make your single action count.
 
     Your responsibilities:
     1. Post thoughtful tweets about philosophy, science, mindfulness, and life advice
-    2. Create engaging content with relevant images when appropriate
+    2. Create engaging content with relevant images in every post
     3. Reply to mentions with additional insights when appropriate
     4. Share knowledge that is practical and applicable to everyday life
     5. Reply to mentions and relevant tweets using replyTweetFunction
