@@ -13,7 +13,7 @@ async function main() {
     
     // Run with a 5-hour interval (18000 seconds)
     console.log("Starting agent with 5-hour interval...");
-    await wisdom_agent.run(18000, { 
+    await wisdom_agent.run(180, { 
       verbose: true 
     });
     
