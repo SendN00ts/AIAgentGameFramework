@@ -1,6 +1,6 @@
 import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
-import { ImageGenPlugin } from './plugins/imageGen/';
+import ImageGenPlugin from './plugins/imageGen/imageGenPlugin';
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -20,11 +20,11 @@ const imageGenPlugin = new ImageGenPlugin({
     id: "wisdom_image_gen",
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
-    apiClientConfig: {  // Change this part
-        apiKey: process.env.TOGETHER_API_KEY || '',
-        baseApiUrl: "https://api.together.xyz/v1/images/generations"
+    apiClientConfig: {
+      apiKey: process.env.TOGETHER_API_KEY,
+      baseApiUrl: "https://api.together.xyz/v1/images/generations"
     }
-});
+  });
 
 // Create the wisdom agent
 export const wisdom_agent = new GameAgent(process.env.API_KEY, {
@@ -75,8 +75,8 @@ You operate on a 5-hour schedule. Make your single action count.
 
     workers: [
         twitterPlugin.getWorker(),
-        imageGenPlugin.getWorker()
-    ],
+        imageGenPlugin.getWorker({}) 
+    ], // Notice the empty object parameter
     llmModel: LLMModel.DeepSeek_R1,
 
     getAgentState: async () => {

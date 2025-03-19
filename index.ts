@@ -1,37 +1,5 @@
 import { wisdom_agent } from './agent';
 
-// Maximum number of retries for API errors
-const MAX_RETRIES = 3;
-// Time to wait between steps (in milliseconds)
-const STEP_DELAY = 300 * 60 * 1000; // 300 minutes (5 hours)
-// Time to wait after an error (in milliseconds)
-const ERROR_RETRY_DELAY = 3 * 60 * 1000; // 3 minutes
-
-async function runAgentWithRetry(retryCount = 0) {
-  try {
-    // Run a single step
-    await wisdom_agent.step({ verbose: true });
-    console.log(`Step completed successfully. Waiting ${STEP_DELAY/60000} minutes until next step...`);
-    
-    // Schedule the next step after a delay
-    setTimeout(() => runAgentWithRetry(), STEP_DELAY);
-    
-  } catch (error) {
-    console.error(`Error running agent step:`, error);
-    
-    if (retryCount < MAX_RETRIES) {
-      const nextRetry = retryCount + 1;
-      console.log(`Retry attempt ${nextRetry}/${MAX_RETRIES} in ${ERROR_RETRY_DELAY/60000} minutes...`);
-      
-      // Wait longer after an error before retrying
-      setTimeout(() => runAgentWithRetry(nextRetry), ERROR_RETRY_DELAY);
-    } else {
-      console.error(`Maximum retry attempts (${MAX_RETRIES}) reached. Please check your configuration and try again later.`);
-      process.exit(1);
-    }
-  }
-}
-
 async function main() {
   try {
     // Initialize the agent
@@ -43,11 +11,14 @@ async function main() {
       w.functions.map(f => f.name)
     ));
     
-    // Start the first step
-    runAgentWithRetry();
+    // Run with a 5-hour interval (18000 seconds)
+    console.log("Starting agent with 5-hour interval...");
+    await wisdom_agent.run(18000, { 
+      verbose: true 
+    });
     
   } catch (error) {
-    console.error("Failed to initialize agent:", error);
+    console.error("Failed to run agent:", error);
     process.exit(1);
   }
 }
