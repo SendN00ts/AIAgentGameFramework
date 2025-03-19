@@ -1,2 +1,1 @@
-import { ImageGenPlugin } from './imageGenPlugin';
-export { ImageGenPlugin };
+export { default as ImageGenPlugin } from "./imageGenPlugin";

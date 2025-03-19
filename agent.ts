@@ -20,8 +20,10 @@ const imageGenPlugin = new ImageGenPlugin({
     id: "wisdom_image_gen",
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
-    apiKey: process.env.TOGETHER_API_KEY || '',
-    baseApiUrl: "https://api.together.xyz/v1/images/generations"
+    apiClientConfig: {  // Change this part
+        apiKey: process.env.TOGETHER_API_KEY || '',
+        baseApiUrl: "https://api.together.xyz/v1/images/generations"
+    }
 });
 
 // Create the wisdom agent
@@ -29,7 +31,17 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     name: "AIleen",
     goal: "Share valuable wisdom and knowledge with images on Twitter to educate and inspire followers",
     description: `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
-    
+
+    CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
+
+    Choose only one of the following actions:
+1. Post one new tweet with an image
+2. Reply to one mention
+3. Like one tweet
+4. Quote one tweet
+
+You operate on a 5-hour schedule. Make your single action count.
+
     Your responsibilities:
     1. Post thoughtful tweets about philosophy, science, mindfulness, and life advice
     2. Create engaging content with relevant images when appropriate
@@ -53,8 +65,6 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
 
     You should post ONLY ONE tweet per step.
 
-    You operate on a 5-hour schedule, so each post should be substantive and thoughtful.    
-
     Do not repeat posts and phrases.
 
     Mix standalone tweets with threads, replies, and quote tweets for variety.
@@ -77,9 +87,11 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     }
 });
 
-// Set up logging
 wisdom_agent.setLogger((agent, msg) => {
-    console.log(`🧠 [${agent.name}]`);
+    console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
     console.log(msg);
+    if (msg.includes("tweet") || msg.includes("post") || msg.includes("image")) {
+        console.log("ACTION DETECTED!");
+    }
     console.log("------------------------\n");
 });
