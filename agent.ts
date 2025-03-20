@@ -90,7 +90,7 @@ You operate on a 1-hour schedule. Make your single action count.
     }
 });
 
-wisdom_agent.setLogger((agent, msg) => {
+wisdom_agent.setLogger((agent: any, msg: string) => {
     console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
     console.log(msg);
     if (msg.includes("tweet") || msg.includes("post") || msg.includes("image")) {

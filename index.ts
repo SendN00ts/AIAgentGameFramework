@@ -11,8 +11,8 @@ async function main() {
     await wisdom_agent.init();
     console.log("Wisdom Twitter Bot initialized successfully!");
 
-    console.log("Available functions:", wisdom_agent.workers.flatMap(w => 
-      w.functions.map(f => f.name)
+    console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) => 
+      w.functions.map((f: any) => f.name)
     ));
     
     // Run with a 1-hour interval (3600 seconds)
