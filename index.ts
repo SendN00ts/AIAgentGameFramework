@@ -2,8 +2,12 @@ import { wisdom_agent } from './agent';
 
 async function main() {
   try {
-    // Initialize the agent
+
     console.log("Initializing Wisdom Twitter Bot...");
+
+    const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
+    wisdom_agent.description = sanitizedDescription;
+
     await wisdom_agent.init();
     console.log("Wisdom Twitter Bot initialized successfully!");
 

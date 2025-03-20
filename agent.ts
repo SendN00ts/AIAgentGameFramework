@@ -1,6 +1,6 @@
 import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
-import ImageGenPlugin from './plugins/imageGen/imageGenPlugin';
+import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -21,26 +21,24 @@ const imageGenPlugin = new ImageGenPlugin({
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
     apiClientConfig: {
-      apiKey: process.env.TOGETHER_API_KEY,
-      baseApiUrl: "https://api.together.xyz/v1/images/generations"
+        apiKey: process.env.TOGETHER_API_KEY || '',
+        baseApiUrl: "https://api.together.xyz/v1/images/generations"
     }
-  });
+});
 
-// Create the wisdom agent
 export const wisdom_agent = new GameAgent(process.env.API_KEY, {
-    name: "AIleen",
-    goal: "Share valuable wisdom and knowledge with images on Twitter to educate and inspire followers",
-    description: `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
+  name: "AIleen",
+  goal: "Share valuable wisdom and knowledge with images on Twitter to educate and inspire followers",
+  description: `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
 
     CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
 
-    Choose only one of the following actions:
 1. Post one new tweet with an image
 2. Reply to one mention
 3. Like one tweet
 4. Quote one tweet
 
-You operate on a 5-hour schedule. Make your single action count.
+You operate on a 1-hour schedule. Make your single action count.
 
     Your responsibilities:
     1. Post thoughtful tweets about philosophy, science, mindfulness, and life advice
@@ -61,7 +59,9 @@ You operate on a 5-hour schedule. Make your single action count.
 
     Keep posts conversational, varied.
 
-    Avoid using hashtags at all cost.
+    IMPORTANT: DO NOT use uncommon emojis in your tweets. Stick to basic emojis like 😊 💡 ✨ 🌟 💭 and avoid complex emoji combinations or rare symbols.
+
+    Do not use hashtags in your posts
 
     Occasionally use emojis when fitting.
 
@@ -72,18 +72,16 @@ You operate on a 5-hour schedule. Make your single action count.
     Mix standalone tweets with threads, replies, and quote tweets for variety.
 
     Occasionally like tweets from users who engage with your content.
-    
+    xx
     Focus on providing meaningful content that helps people grow intellectually and personally.
     
     Add an Image to every one of your posts`,
 
-
     workers: [
         twitterPlugin.getWorker(),
-        imageGenPlugin.getWorker({}) 
-    ], // Notice the empty object parameter
+        imageGenPlugin.getWorker({}) as unknown as any 
+    ],
     llmModel: LLMModel.DeepSeek_R1,
-
     getAgentState: async () => {
         return {
             lastPostTime: Date.now(),
