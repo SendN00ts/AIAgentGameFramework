@@ -15,7 +15,7 @@ async function runAgentWithInterval() {
     
     // Schedule the next step after exactly 1 hour
     console.log("Step completed. Next execution scheduled in 3 minutes.");
-    setTimeout(runAgentWithInterval, 60 * 60 * 1000); // 1 hour
+    setTimeout(runAgentWithInterval, 0.003 * 60 * 1000); // 1 hour
   } catch (error) {
     console.error("Error running agent step:", error);
     setTimeout(runAgentWithInterval, 5 * 60 * 1000); // retry in 5 minutes if error
