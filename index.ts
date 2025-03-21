@@ -12,6 +12,8 @@ async function runAgentWithInterval() {
     // Run a single step
     console.log(`Running agent step at ${new Date().toISOString()}`);
     await wisdom_agent.step({ verbose: true });
+    console.log("⏳ Waiting 60 seconds before the next step...");
+  await new Promise(resolve => setTimeout(resolve, 60000)); 
     
     // Schedule the next step after exactly 1 hour
     console.log("Step completed. Next execution scheduled in 3 minutes.");
