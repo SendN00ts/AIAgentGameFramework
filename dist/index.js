@@ -2,42 +2,52 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 // src/index.ts
 const agent_1 = require("./agent");
-// Maximum number of retries for API errors
-const MAX_RETRIES = 3;
-// Time to wait between steps (in milliseconds)
-const STEP_DELAY = 5 * 60 * 1000; // 30 minutes
-// Time to wait after an error (in milliseconds)
-const ERROR_RETRY_DELAY = 3 * 60 * 1000; // 5 minutes
-async function runAgentWithRetry(retryCount = 0) {
+// Flag to track if a function has been called this cycle
+let functionCalledThisCycle = false;
+async function runAgentWithInterval() {
     try {
+        // Reset the flag for this cycle
+        functionCalledThisCycle = false;
         // Run a single step
+        console.log(`Running agent step at ${new Date().toISOString()}`);
         await agent_1.wisdom_agent.step({ verbose: true });
-        console.log(`Step completed successfully. Waiting ${STEP_DELAY / 60000} minutes until next step...`);
-        // Schedule the next step after a delay
-        setTimeout(() => runAgentWithRetry(), STEP_DELAY);
+        // Schedule the next step after exactly 1 hour
+        console.log("Step completed. Next execution scheduled in 1 hour.");
+        setTimeout(runAgentWithInterval, 60 * 60 * 1000); // 1 hour
     }
     catch (error) {
-        console.error(`Error running agent step:`, error);
-        if (retryCount < MAX_RETRIES) {
-            const nextRetry = retryCount + 1;
-            console.log(`Retry attempt ${nextRetry}/${MAX_RETRIES} in ${ERROR_RETRY_DELAY / 60000} minutes...`);
-            // Wait longer after an error before retrying
-            setTimeout(() => runAgentWithRetry(nextRetry), ERROR_RETRY_DELAY);
-        }
-        else {
-            console.error(`Maximum retry attempts (${MAX_RETRIES}) reached. Please check your configuration and try again later.`);
-            process.exit(1);
-        }
+        console.error("Error running agent step:", error);
+        setTimeout(runAgentWithInterval, 5 * 60 * 1000); // retry in 5 minutes if error
     }
 }
 async function main() {
     try {
-        // Initialize the agent
         console.log("Initializing Wisdom Twitter Bot...");
+        // Set up the logger to monitor function calls
+        agent_1.wisdom_agent.setLogger((agent, msg) => {
+            // Check for function execution
+            if (msg.includes("post_tweet") ||
+                msg.includes("search_tweets") ||
+                msg.includes("reply_tweet") ||
+                msg.includes("like_tweet") ||
+                msg.includes("generate_image")) {
+                if (functionCalledThisCycle) {
+                    console.warn("⚠️ MULTIPLE FUNCTION CALLS DETECTED IN SINGLE CYCLE!");
+                }
+                functionCalledThisCycle = true;
+            }
+            console.log(`🧠 [${agent.name}]`);
+            console.log(msg);
+            console.log("------------------------\n");
+        });
+        // Sanitize description
+        const sanitizedDescription = agent_1.wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
+        agent_1.wisdom_agent.description = "CRITICAL INSTRUCTION: You are strictly limited to ONE SINGLE FUNCTION CALL TOTAL per execution. You will run once per hour.\n\n" + sanitizedDescription;
         await agent_1.wisdom_agent.init();
         console.log("Wisdom Twitter Bot initialized successfully!");
-        // Start the first step
-        runAgentWithRetry();
+        console.log("Available functions:", agent_1.wisdom_agent.workers.flatMap((w) => w.functions.map((f) => f.name)));
+        // Start with step + setTimeout instead of run
+        runAgentWithInterval();
     }
     catch (error) {
         console.error("Failed to initialize agent:", error);
