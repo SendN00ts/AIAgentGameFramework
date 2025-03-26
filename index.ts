@@ -103,28 +103,47 @@ All other actions are forbidden in this cycle.`;
 }
 
 async function main() {
-  try {
-    console.log("Initializing Twitter Bot...");
-    
-    // Sanitize description
-    const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
-    wisdom_agent.description = sanitizedDescription;
-    
-    await wisdom_agent.init();
-    console.log("Twitter Bot initialized successfully!");
-    
-    // Log available functions
-    console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>
-      w.functions.map((f: any) => f.name)
-    ));
-    
-    // Start scheduling
-    runAgentWithSchedule();
-    
-  } catch (error) {
-    console.error("Failed to initialize agent:", error);
-    process.exit(1);
+  let initAttempt = 0;
+  const maxInitAttempts = 5;
+  
+  while (initAttempt < maxInitAttempts) {
+    try {
+      console.log(`Initializing Twitter Bot (Attempt ${initAttempt+1}/${maxInitAttempts})...`);
+      
+      // Sanitize description
+      const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
+      wisdom_agent.description = sanitizedDescription;
+      
+      // Using a longer timeout for initialization
+      await wisdom_agent.init();
+      console.log("Twitter Bot initialized successfully!");
+      
+      // If we got here, initialization succeeded
+      console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>
+        w.functions.map((f: any) => f.name)
+      ));
+      
+      // Start scheduling
+      runAgentWithSchedule();
+      return; // Exit the retry loop on success
+      
+    } catch (error: any) {
+      initAttempt++;
+      
+      // Check specifically for rate limit errors
+      if (error.response?.status === 429) {
+        const waitTime = Math.pow(3, initAttempt) * 10000; // Exponential backoff: 30s, 90s, 270s, etc.
+        console.log(`Rate limit hit. Waiting ${waitTime/1000} seconds before retry ${initAttempt+1}...`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      } else {
+        console.error("Failed with non-rate-limit error:", error);
+        process.exit(1);
+      }
+    }
   }
+  
+  console.error(`Failed to initialize after ${maxInitAttempts} attempts`);
+  process.exit(1);
 }
 
 main();
