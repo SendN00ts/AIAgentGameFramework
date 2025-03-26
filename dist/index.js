@@ -2,123 +2,47 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 // src/index.ts
 const agent_1 = require("./agent");
-// Flag to track if a function has been called this cycle
-// Tracking variables
-let lastPostTime = 0;
-let functionCalledThisCycle = false;
-// Action rotation - post is special and less frequent
-const ACTIONS = {
-    POST: 'post',
-    REPLY: 'reply',
-    SEARCH: 'search',
-    LIKE: 'like',
-    QUOTE: 'quote'
-};
-// Config for timing
-const POST_INTERVAL = 60 * 60 * 1000; // 1 hour for posts
-const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
-// Track current action in rotation (excluding POST which has its own schedule)
-let currentActionIndex = 0;
-const nonPostActions = [ACTIONS.REPLY, ACTIONS.SEARCH, ACTIONS.LIKE, ACTIONS.QUOTE];
-// Function to get next action based on timing
-function getNextAction() {
-    const now = Date.now();
-    const timeSinceLastPost = now - lastPostTime;
-    // If it's been more than POST_INTERVAL since last post, do a post
-    if (timeSinceLastPost >= POST_INTERVAL) {
-        return ACTIONS.POST;
-    }
-    // Otherwise, pick the next action in rotation
-    const action = nonPostActions[currentActionIndex];
-    currentActionIndex = (currentActionIndex + 1) % nonPostActions.length;
-    return action;
-}
-// Run agent with improved retry and scheduling
-async function runAgentWithSchedule(retryCount = 0) {
+// Maximum number of retries for API errors
+const MAX_RETRIES = 3;
+// Time to wait between steps (in milliseconds)
+const STEP_DELAY = 5 * 60 * 1000; // 30 minutes
+// Time to wait after an error (in milliseconds)
+const ERROR_RETRY_DELAY = 3 * 60 * 1000; // 5 minutes
+async function runAgentWithRetry(retryCount = 0) {
     try {
-        // Reset tracking
-        functionCalledThisCycle = false;
-        // Determine next action
-        const nextAction = getNextAction();
-        // Update agent description to focus on the chosen action
-        updateAgentForAction(nextAction);
-        // Run a step
-        console.log(`Running agent step at ${new Date().toISOString()} - Action: ${nextAction}`);
+        // Run a single step
         await agent_1.wisdom_agent.step({ verbose: true });
-        // If this was a post, update last post time
-        if (nextAction === ACTIONS.POST) {
-            lastPostTime = Date.now();
-            console.log("Post completed. Next post in one hour.");
-            setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
-        }
-        else {
-            console.log(`${nextAction.toUpperCase()} action completed. Next action in 15 minutes.`);
-            setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
-        }
+        console.log(`Step completed successfully. Waiting ${STEP_DELAY / 60000} minutes until next step...`);
+        // Schedule the next step after a delay
+        setTimeout(() => runAgentWithRetry(), STEP_DELAY);
     }
     catch (error) {
-        // Error handling with exponential backoff
         console.error(`Error running agent step:`, error);
-        const baseDelay = Math.min((Math.pow(2, retryCount) * 60 * 1000), 30 * 60 * 1000);
-        const jitter = Math.random() * 30 * 1000;
-        const retryDelay = baseDelay + jitter;
-        console.log(`Retry attempt ${retryCount + 1}, waiting ${Math.round(retryDelay / 1000)} seconds...`);
-        setTimeout(() => runAgentWithSchedule(retryCount + 1), retryDelay);
+        if (retryCount < MAX_RETRIES) {
+            const nextRetry = retryCount + 1;
+            console.log(`Retry attempt ${nextRetry}/${MAX_RETRIES} in ${ERROR_RETRY_DELAY / 60000} minutes...`);
+            // Wait longer after an error before retrying
+            setTimeout(() => runAgentWithRetry(nextRetry), ERROR_RETRY_DELAY);
+        }
+        else {
+            console.error(`Maximum retry attempts (${MAX_RETRIES}) reached. Please check your configuration and try again later.`);
+            process.exit(1);
+        }
     }
-}
-function updateAgentForAction(action) {
-    // Extract original description sections
-    const baseDescription = agent_1.wisdom_agent.description.split("CURRENT REQUIRED ACTION")[0];
-    // Create new focused description with proper typing
-    const actionDescriptions = {
-        post: "POST original content with an image (use post_tweet with generate_image)",
-        reply: "REPLY to existing tweets (use reply_tweet)",
-        search: "SEARCH for relevant content (use search_tweets)",
-        like: "LIKE meaningful content (use like_tweet)",
-        quote: "QUOTE other tweets with your commentary (use quote_tweet)"
-    };
-    // Update agent's description
-    agent_1.wisdom_agent.description = `${baseDescription}
-CURRENT REQUIRED ACTION: ${action.toUpperCase()}
-
-You MUST perform ONLY this action: ${actionDescriptions[action]}
-
-All other actions are forbidden in this cycle.`;
 }
 async function main() {
-    let initAttempt = 0;
-    const maxInitAttempts = 5;
-    while (initAttempt < maxInitAttempts) {
-        try {
-            console.log(`Initializing Twitter Bot (Attempt ${initAttempt + 1}/${maxInitAttempts})...`);
-            // Sanitize description
-            const sanitizedDescription = agent_1.wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
-            agent_1.wisdom_agent.description = sanitizedDescription;
-            // Using a longer timeout for initialization
-            await agent_1.wisdom_agent.init();
-            console.log("Twitter Bot initialized successfully!");
-            // If we got here, initialization succeeded
-            console.log("Available functions:", agent_1.wisdom_agent.workers.flatMap((w) => w.functions.map((f) => f.name)));
-            // Start scheduling
-            runAgentWithSchedule();
-            return; // Exit the retry loop on success
-        }
-        catch (error) {
-            initAttempt++;
-            // Check specifically for rate limit errors
-            if (error.response?.status === 429) {
-                const waitTime = Math.pow(3, initAttempt) * 10000; // Exponential backoff: 30s, 90s, 270s, etc.
-                console.log(`Rate limit hit. Waiting ${waitTime / 1000} seconds before retry ${initAttempt + 1}...`);
-                await new Promise(resolve => setTimeout(resolve, waitTime));
-            }
-            else {
-                console.error("Failed with non-rate-limit error:", error);
-                process.exit(1);
-            }
-        }
+    try {
+        // Initialize the agent
+        console.log("Initializing Wisdom Twitter Bot...");
+        await agent_1.wisdom_agent.init();
+        console.log("Wisdom Twitter Bot initialized successfully!");
+        // Start the first step
+        runAgentWithRetry();
     }
-    console.error(`Failed to initialize after ${maxInitAttempts} attempts`);
-    process.exit(1);
+    catch (error) {
+        console.error("Failed to initialize agent:", error);
+        process.exit(1);
+    }
 }
 main();
 //# sourceMappingURL=index.js.map
