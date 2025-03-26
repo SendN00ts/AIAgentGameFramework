@@ -33,7 +33,6 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     description: `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
 
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
-You operate on a 1-hour schedule. Make your single action count.
 
 YOUR ACTIONS ROTATE BETWEEN:
 1. POST: Use post_tweet with generate_image for new wisdom content
