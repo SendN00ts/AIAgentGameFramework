@@ -109,11 +109,17 @@ async function main() {
     
     await wisdom_agent.init();
     console.log("Twitter Bot initialized successfully!");
+
     
-    // Log available functions
-    console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>
-      w.functions.map((f: any) => f.name)
-    ));
+// Access functions through the initialized agent
+console.log("AVAILABLE TWITTER FUNCTIONS:", 
+  wisdom_agent.workers[0].functions.map(f => `${f.name}: ${f.description}`)
+);
+
+// Also check image generation functions
+console.log("AVAILABLE IMAGE FUNCTIONS:",
+  wisdom_agent.workers[1].functions.map(f => `${f.name}: ${f.description}`)
+);
     
     // Start scheduling
     runAgentWithSchedule();
