@@ -103,6 +103,11 @@ All other actions are forbidden in this cycle.`;
 }
 
 async function main() {
+
+  console.log("Starting with 30-second initialization delay...");
+  await new Promise(resolve => setTimeout(resolve, 30000));
+  console.log("Delay complete, proceeding with initialization");
+
   let initAttempt = 0;
   const maxInitAttempts = 5;
   

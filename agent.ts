@@ -17,9 +17,10 @@ if (!process.env.TOGETHER_API_KEY) {
 }
 
 // Create image generation plugin
+// In agent.ts
 const imageGenPlugin = new ImageGenPlugin({
-    id: "wisdom_image_gen",
-    name: "Wisdom Image Generator",
+    id: "aileen_wisdom_image_gen_" + Date.now().toString(),
+    name: "Aileen Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
     apiClientConfig: {
         apiKey: process.env.TOGETHER_API_KEY || '',
