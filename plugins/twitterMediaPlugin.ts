@@ -39,21 +39,19 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         // 1. Download the image
         if (logger) logger(`Downloading image from ${image_url}`);
         const imageResponse = await axios.get(image_url, { responseType: 'arraybuffer' });
-        const tempImagePath = path.join(tmpDir, `temp_image_${Date.now()}.jpg`);
-        fs.writeFileSync(tempImagePath, imageResponse.data);
-        
-        // 2. Upload to Twitter
-        if (logger) logger('Uploading image to Twitter');
-        const mediaId = await twitterClient.v1.uploadMedia(tempImagePath);
+        const mediaBuffer = Buffer.from(imageResponse.data);
+
+        if (!mediaBuffer || mediaBuffer.length < 1024) {
+          throw new Error("Image buffer is empty or too small — possible download failure.");
+        }
+
+        const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer, { type: 'jpg' });
         
         // 3. Post tweet with media
         if (logger) logger('Posting tweet with attached media');
         const tweet = await twitterClient.v2.tweet(text, {
           media: { media_ids: [mediaId] }
         });
-        
-        // 4. Clean up temp file
-        fs.unlinkSync(tempImagePath);
         
         return new ExecutableGameFunctionResponse(
           ExecutableGameFunctionStatus.Done,
