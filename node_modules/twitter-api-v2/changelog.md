@@ -1,3 +1,15 @@
+1.22.0
+------
+- Fix V2 Media Alt Text (breaking change) #580 (@francistogram)
+
+1.21.1
+------
+- Fix V2 Media Alt Text #578 (@francistogram)
+
+1.21.0
+------
+- add v2 media metadata #575 (@francistogram)
+
 1.20.2
 ------
 - fix: upload-media v2 endpoint #570 #571 (@leeran7)

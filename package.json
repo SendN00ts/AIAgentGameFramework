@@ -4,16 +4,18 @@
   "description": "Twitter bot that posts wisdom",
   "main": "dist/index.js",
   "scripts": {
-  "prebuild": "rm -rf dist", 
-  "build": "tsc",
-  "start": "node dist/index.js"
-},
+    "prebuild": "rm -rf dist",
+    "build": "tsc",
+    "start": "node dist/index.js"
+  },
   "dependencies": {
     "@virtuals-protocol/game": "^0.1.10",
     "@virtuals-protocol/game-imagegen-plugin": "^0.1.0",
     "@virtuals-protocol/game-twitter-plugin": "^0.1.8",
+    "axios": "^1.8.4",
     "dotenv": "^16.3.1",
-    "openai": "^4.87.3"
+    "openai": "^4.87.3",
+    "twitter-api-v2": "^1.22.0"
   },
   "devDependencies": {
     "@types/node": "^18.11.18",

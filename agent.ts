@@ -1,6 +1,7 @@
 import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
 import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
+import { createTwitterMediaWorker } from './plugins/twitterMediaPlugin';
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -26,6 +27,16 @@ const imageGenPlugin = new ImageGenPlugin({
     }
 });
 
+const twitterMediaWorker = createTwitterMediaWorker(
+    process.env.TWITTER_API_KEY!,
+    process.env.TWITTER_API_SECRET!,
+    process.env.TWITTER_ACCESS_TOKEN!,
+    process.env.TWITTER_ACCESS_SECRET!
+);
+
+const twitterWorker = twitterPlugin.getWorker();
+twitterWorker.functions = twitterWorker.functions.filter(fn => fn.name !== "post_tweet");
+
 export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     name: "AIleen",
     goal: "Share valuable wisdom and knowledge with images on Twitter to educate and inspire followers",
@@ -42,10 +53,9 @@ YOUR POSSIBLE ACTIONS:
 - QUOTE: Share others' insights with your commentary
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. FIRST call the generate_image function with a descriptive prompt
-2. WAIT for the image URL in the response
-3. THEN call post_tweet and include the FULL IMAGE URL in your tweet content
-4. IMPORTANT: The image URL MUST be included in your tweet text for it to appear
+1. Generate an image using generate_image to get a URL
+2. Use upload_image_and_tweet with your text and the image URL
+3. The image will be properly attached to your tweet
 
 EXAMPLE:
 1. Call generate_image with prompt: "A serene mountain lake reflecting the wisdom of patience"
@@ -73,8 +83,9 @@ ADDITIONAL INFOS:
 REMEMBER: ONE ACTION PER STEP ONLY. Do not attempt multiple actions in a single step.`,
 
     workers: [
-        twitterPlugin.getWorker(),
-        imageGenPlugin.getWorker({}) as any
+        twitterWorker,
+        imageGenPlugin.getWorker({}) as any,
+        twitterMediaWorker
     ],
     llmModel: LLMModel.DeepSeek_R1,
     getAgentState: async () => {
