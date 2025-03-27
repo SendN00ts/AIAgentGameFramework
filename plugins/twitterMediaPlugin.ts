@@ -43,14 +43,14 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           );
         }
         
-        if (image_url.endsWith("...") || image_url.includes("/...")) {
+        if (image_url.endsWith("...") || image_url.includes("/...") || image_url.includes("***")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL appears truncated with '...' — ensure full URL is properly passed"
+            "Image URL appears truncated with '...' or '***' — ensure full URL is properly passed"
           );
         }
 
-        if (!image_url.startsWith("https://api.together.ai/imgproxy/") || !image_url.includes("/format:jpeg/")) {
+        if (!image_url.startsWith("https://api.together.ai/imgproxy/")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "Image URL format appears invalid — ensure it is the full URL returned by the image generation plugin."
@@ -59,51 +59,68 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
 
         console.log("📸 Full image URL used:", image_url);
         
-        // 1. Download the image with better error handling
+        // Download with retry logic
         if (logger) logger(`Downloading image from ${image_url}`);
         
-        try {
-          const imageResponse = await axios.get(image_url, { 
-            responseType: 'arraybuffer',
-            timeout: 15000, // 15 second timeout
-            maxRedirects: 5,
-            headers: {
-              'Accept': 'image/jpeg,image/*',
-              'User-Agent': 'TwitterBot/1.0'
+        let mediaBuffer;
+        let retryCount = 0;
+        const maxRetries = 3;
+        
+        while (retryCount < maxRetries) {
+          try {
+            const imageResponse = await axios.get(image_url, { 
+              responseType: 'arraybuffer',
+              timeout: 15000,
+              maxRedirects: 5,
+              headers: {
+                'Accept': 'image/jpeg,image/*',
+                'User-Agent': 'TwitterBot/1.0'
+              }
+            });
+            
+            mediaBuffer = Buffer.from(imageResponse.data);
+            
+            if (logger) logger(`Created media buffer of size: ${mediaBuffer.length}`);
+
+            if (!mediaBuffer || mediaBuffer.length < 1024) {
+              if (retryCount >= maxRetries - 1) {
+                throw new Error(`Downloaded image too small (${mediaBuffer?.length || 0} bytes) - possible download failure.`);
+              } else {
+                retryCount++;
+                if (logger) logger(`Retry ${retryCount}/${maxRetries}: Image too small`);
+                await new Promise(r => setTimeout(r, 1000)); // Wait 1s between retries
+                continue;
+              }
             }
-          });
-          
-          const mediaBuffer = Buffer.from(imageResponse.data);
-          
-          if (logger) logger(`Created media buffer of size: ${mediaBuffer.length}`);
-
-          if (!mediaBuffer || mediaBuffer.length < 1024) {
-            throw new Error(`Downloaded image too small (${mediaBuffer?.length || 0} bytes) - possible download failure.`);
+            
+            break; // Success - exit retry loop
+            
+          } catch (downloadError: any) {
+            if (retryCount >= maxRetries - 1) {
+              throw downloadError;
+            }
+            retryCount++;
+            if (logger) logger(`Retry ${retryCount}/${maxRetries} after error: ${downloadError.message}`);
+            await new Promise(r => setTimeout(r, 1000)); // Wait 1s between retries
           }
-
-          // 2. Upload to Twitter
-          if (logger) logger(`Uploading image to Twitter`);
-          const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer, { type: 'jpg' });
-          
-          // 3. Post tweet with media
-          if (logger) logger('Posting tweet with attached media');
-          const tweet = await twitterClient.v2.tweet(text, {
-            media: { media_ids: [mediaId] }
-          });
-
-          if (logger) logger(`Successfully posted tweet: ${tweet.data.id}`);
-          
-          return new ExecutableGameFunctionResponse(
-            ExecutableGameFunctionStatus.Done,
-            `Tweet posted successfully with media: ${tweet.data.id}`
-          );
-        } catch (downloadError: any) {
-          console.error('Image download or processing failed:', downloadError);
-          return new ExecutableGameFunctionResponse(
-            ExecutableGameFunctionStatus.Failed,
-            `Image download/processing failed: ${downloadError.message}. The pre-signed URL may have expired.`
-          );
         }
+
+        // Upload to Twitter
+        if (logger) logger(`Uploading image to Twitter`);
+        const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer as Buffer, { type: 'jpg' });
+        
+        // Post tweet with media
+        if (logger) logger('Posting tweet with attached media');
+        const tweet = await twitterClient.v2.tweet(text, {
+          media: { media_ids: [mediaId] }
+        });
+
+        if (logger) logger(`Successfully posted tweet: ${tweet.data.id}`);
+        
+        return new ExecutableGameFunctionResponse(
+          ExecutableGameFunctionStatus.Done,
+          `Tweet posted successfully with media: ${tweet.data.id}`
+        );
       } catch (error: any) {
         console.error('Error posting tweet with media:', error);
         return new ExecutableGameFunctionResponse(
