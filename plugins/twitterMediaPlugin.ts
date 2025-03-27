@@ -35,16 +35,28 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
             "Tweet text and image URL are required"
           );
         }
+
+        if (image_url.includes("[TRUNCATED]")) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Image URL appears truncated — please provide a valid URL from image generation step."
+          );
+        }
+
+        console.log("📸 Full image URL used:", image_url);
         
         // 1. Download the image
         if (logger) logger(`Downloading image from ${image_url}`);
         const imageResponse = await axios.get(image_url, { responseType: 'arraybuffer' });
         const mediaBuffer = Buffer.from(imageResponse.data);
+        
+        if (logger) logger(`Created media buffer of size: ${mediaBuffer.length}`);
 
         if (!mediaBuffer || mediaBuffer.length < 1024) {
           throw new Error("Image buffer is empty or too small — possible download failure.");
         }
 
+        if (logger) logger(`Uploading image to Twitter`);
         const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer, { type: 'jpg' });
         
         // 3. Post tweet with media
@@ -52,6 +64,8 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         const tweet = await twitterClient.v2.tweet(text, {
           media: { media_ids: [mediaId] }
         });
+
+        if (logger) logger(`Successfully posted tweet: ${tweet.data.id}`);
         
         return new ExecutableGameFunctionResponse(
           ExecutableGameFunctionStatus.Done,
