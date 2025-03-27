@@ -43,6 +43,20 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           );
         }
 
+        if (image_url.endsWith("...") || image_url.includes("/...")) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Image URL appears truncated with '...' — ensure full URL is properly passed"
+          );
+        }
+
+        if (!image_url.startsWith("https://api.together.ai/imgproxy/") || !image_url.includes("/format:jpeg/")) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Image URL format appears invalid — ensure it is the full URL returned by the image generation plugin."
+          );
+        }
+
         console.log("📸 Full image URL used:", image_url);
         
         // 1. Download the image
