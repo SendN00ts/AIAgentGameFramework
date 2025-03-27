@@ -64,6 +64,16 @@ ABSOLUTELY CRITICAL INSTRUCTION FOR IMAGE HANDLING:
 - You MUST pass the COMPLETE URL from generate_image to upload_image_and_tweet
 - Failure to use the complete URL will cause the entire process to fail
 
+CRITICAL INSTRUCTION FOR URLS:
+- You MUST pass complete URLs exactly as received
+- NEVER truncate URLs with *** or ...
+- When referencing a URL in your reasoning, use the placeholder [FULL_IMAGE_URL] instead of trying to include the entire URL
+- URLs can be hundreds of characters long and must be preserved exactly
+
+EXAMPLE FOR REASONING:
+Instead of writing: "I'll use https://api.together.ai/imgproxy/abcdef..."
+Write: "I'll use [FULL_IMAGE_URL]"
+
 EXAMPLE OF CORRECT BEHAVIOR:
 1. generate_image returns: "https://api.together.ai/imgproxy/abcdef123456/format:jpeg/aHR0cHM6Ly90b2dldGhlciL0ImFnZXMvYjFkY2ViDg2YjI5NmYzOTU3"
 2. You must use EXACTLY: "https://api.together.ai/imgproxy/abcdef123456/format:jpeg/aHR0cHM6Ly90b2dldGhlciL0ImFnZXMvYjFkY2ViDg2YjI5NmYzOTU3"
