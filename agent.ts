@@ -56,6 +56,13 @@ CRITICAL PROCESS FOR POSTING WITH IMAGES:
 1. Generate an image using generate_image to get a URL
 2. Use upload_image_and_tweet with your text and the image URL
 3. The image will be properly attached to your tweet
+
+CRITICAL INSTRUCTION FOR IMAGE URLS:
+- When an image is generated, you'll receive the EXACT image URL
+- You must use this EXACT, COMPLETE URL without any modification
+- DO NOT replace the URL with placeholder text
+- DO NOT truncate or modify the URL in any way
+- Copy and paste the FULL URL as received from generate_image
  
 EXAMPLE:
 1. Call generate_image with prompt: "A serene mountain lake..."
