@@ -35,7 +35,6 @@ const twitterMediaWorker = createTwitterMediaWorker(
 );
 
 const twitterWorker = twitterPlugin.getWorker();
-twitterWorker.functions = twitterWorker.functions.filter(fn => fn.name !== "post_tweet");
 
 export const wisdom_agent = new GameAgent(process.env.API_KEY, {
     name: "AIleen",

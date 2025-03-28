@@ -12,6 +12,6 @@
     "resolveJsonModule": true,
     "sourceMap": true
   },
-  "include": ["*.ts", "plugins/twitterPlugin/twitterPlugin.ts"],
+  "include": ["*.ts", "plugins/twitterPlugin/twitterPlugin.ts", "test/twitter-post-test.ts"],
   "exclude": ["node_modules", "dist"]
 }
