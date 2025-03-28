@@ -29,13 +29,18 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
       try {
         const { text, image_url } = args;
         
+        // Added logging at beginning
+        console.log("⚠️ TWEET ATTEMPT ⚠️");
+        console.log("Text:", text);
+        console.log("Image URL (first 50 chars):", image_url ? image_url.substring(0, 50) + "..." : "undefined");
+        
         if (!text || !image_url) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "Tweet text and image URL are required"
           );
         }
-
+    
         if (image_url.includes("[TRUNCATED]")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
@@ -49,18 +54,19 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
             "Image URL appears truncated with '...' or '***' — ensure full URL is properly passed"
           );
         }
-
+    
         if (!image_url.startsWith("https://api.together.ai/imgproxy/")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "Image URL format appears invalid — ensure it is the full URL returned by the image generation plugin."
           );
         }
-
+    
         console.log("📸 Full image URL used:", image_url);
         
         // Download with retry logic
         if (logger) logger(`Downloading image from ${image_url}`);
+        console.log("📥 Attempting image download...");
         
         let mediaBuffer;
         let retryCount = 0;
@@ -79,14 +85,16 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
             });
             
             mediaBuffer = Buffer.from(imageResponse.data);
+            console.log("✅ Image downloaded successfully, size:", mediaBuffer.length);
             
             if (logger) logger(`Created media buffer of size: ${mediaBuffer.length}`);
-
+    
             if (!mediaBuffer || mediaBuffer.length < 1024) {
               if (retryCount >= maxRetries - 1) {
                 throw new Error(`Downloaded image too small (${mediaBuffer?.length || 0} bytes) - possible download failure.`);
               } else {
                 retryCount++;
+                console.log(`🔄 Retry ${retryCount}/${maxRetries}: Image too small`);
                 if (logger) logger(`Retry ${retryCount}/${maxRetries}: Image too small`);
                 await new Promise(r => setTimeout(r, 1000)); // Wait 1s between retries
                 continue;
@@ -96,25 +104,31 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
             break; // Success - exit retry loop
             
           } catch (downloadError: any) {
+            console.error("❌ Image download error:", downloadError.message);
             if (retryCount >= maxRetries - 1) {
               throw downloadError;
             }
             retryCount++;
+            console.log(`🔄 Retry ${retryCount}/${maxRetries} after error`);
             if (logger) logger(`Retry ${retryCount}/${maxRetries} after error: ${downloadError.message}`);
             await new Promise(r => setTimeout(r, 1000)); // Wait 1s between retries
           }
         }
-
+    
         // Upload to Twitter
+        console.log("📤 Uploading image to Twitter...");
         if (logger) logger(`Uploading image to Twitter`);
         const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer as Buffer, { type: 'jpg' });
+        console.log("✅ Image uploaded to Twitter, media ID:", mediaId);
         
         // Post tweet with media
+        console.log("📝 Posting tweet with media...");
         if (logger) logger('Posting tweet with attached media');
         const tweet = await twitterClient.v2.tweet(text, {
           media: { media_ids: [mediaId] }
         });
-
+    
+        console.log("🎉 SUCCESS: Tweet posted with ID:", tweet.data.id);
         if (logger) logger(`Successfully posted tweet: ${tweet.data.id}`);
         
         return new ExecutableGameFunctionResponse(
@@ -122,6 +136,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           `Tweet posted successfully with media: ${tweet.data.id}`
         );
       } catch (error: any) {
+        console.error('❌ DETAILED ERROR:', JSON.stringify(error, null, 2));
         console.error('Error posting tweet with media:', error);
         return new ExecutableGameFunctionResponse(
           ExecutableGameFunctionStatus.Failed,
