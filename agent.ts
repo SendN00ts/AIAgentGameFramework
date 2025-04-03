@@ -2,6 +2,7 @@ import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
 import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import { createTwitterMediaWorker } from './plugins/twitterMediaPlugin';
+import { createReplyGuyWorker } from './plugins/replyGuyPlugin';
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -34,6 +35,13 @@ const twitterMediaWorker = createTwitterMediaWorker(
     process.env.TWITTER_ACCESS_SECRET!
 );
 
+const replyGuyWorker = createReplyGuyWorker(
+    process.env.TWITTER_API_KEY!,
+    process.env.TWITTER_API_SECRET!,
+    process.env.TWITTER_ACCESS_TOKEN!,
+    process.env.TWITTER_ACCESS_SECRET!
+);
+
 const twitterWorker = twitterPlugin.getWorker();
 
 export const wisdom_agent = new GameAgent(process.env.API_KEY, {
@@ -50,6 +58,7 @@ YOUR POSSIBLE ACTIONS:
 - SEARCH: Find relevant wisdom discussions
 - LIKE: Appreciate thoughtful content
 - QUOTE: Share others' insights with your commentary
+- REPLY_TO_TARGET: Reply to wellness and philosophy accounts to build connections
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
 - Generate an image using generate_image to get a URL
@@ -87,6 +96,14 @@ CRITICAL FORMAT CORRECTION:
 - The image_url parameter should contain the complete image URL
 - Example correct format: upload_image_and_tweet("Wisdom quote with #hashtags", "https://actual-image-url...")
 
+CRITICAL PROCESS FOR REPLY_TO_TARGET ACTION:
+- First use find_target_account to get information about a target account and their latest tweet
+- Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
+- Mention topics relevant to the account's description and tweet content
+- Be authentic, supportive, and natural in your reply
+- Keep replies concise (1-3 sentences)
+- Include 1-2 relevant hashtags
+
 YOUR CONTENT GUIDELINES:
 - Post thoughtful content about philosophy, mindfulness, and life wisdom
 - Share timeless quotes from great thinkers
@@ -105,7 +122,8 @@ REMEMBER: ONE ACTION PER STEP ONLY. Do not attempt multiple actions in a single 
     workers: [
         twitterWorker,
         imageGenPlugin.getWorker({}) as any,
-        twitterMediaWorker
+        twitterMediaWorker,
+        replyGuyWorker
     ],
     llmModel: LLMModel.DeepSeek_R1,
     getAgentState: async () => {

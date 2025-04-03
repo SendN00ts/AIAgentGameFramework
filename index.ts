@@ -1,5 +1,4 @@
 import { wisdom_agent } from './agent';
-import { performTargetedReplies } from './plugins/replyGuyPlugin';
 
 // Define actions as an enum to ensure type safety
 enum ACTIONS {
@@ -50,9 +49,9 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   
   // Create new focused description with proper typing
   const actionDescriptions: Record<ACTIONS, string> = {
-    [ACTIONS.POST]: "POST original content with an image (use post_tweet with generate_image)",
+    [ACTIONS.POST]: "POST original content with an image (use generate_image and upload_image_and_tweet)",
     [ACTIONS.REPLY]: "REPLY to existing tweets (use reply_tweet)",
-    [ACTIONS.REPLY_TARGETS]: "REPLY to tweets from targeted accounts (use search_tweets and reply_tweet)",
+    [ACTIONS.REPLY_TARGETS]: "REPLY to wellness and philosophy accounts (use find_target_account and reply_tweet)",
     [ACTIONS.SEARCH]: "SEARCH for relevant content (use search_tweets)",
     [ACTIONS.LIKE]: "LIKE meaningful content (use like_tweet)",
     [ACTIONS.QUOTE]: "QUOTE other tweets with your commentary (use quote_tweet)"
@@ -66,6 +65,18 @@ IMPORTANT: Previous attempt failed due to image URL issues.
 Please generate a FRESH NEW IMAGE using generate_image before posting.
 DO NOT reuse previous image URLs. Generate a completely new image with a simpler prompt.
 Use simpler image descriptions with fewer details for more reliable processing.
+`;
+  }
+
+  // Add targeted reply instructions if needed
+  if (action === ACTIONS.REPLY_TARGETS) {
+    additionalInstructions = `
+IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
+1. First use find_target_account to get information about a target wellness account and their latest tweet
+2. Review the account description and tweet content carefully
+3. Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
+4. Be authentic, supportive and natural in your reply
+5. Keep replies concise (1-3 sentences) and include 1-2 relevant hashtags
 `;
   }
   
@@ -97,10 +108,6 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     
     try {
       switch (nextAction) {
-        case ACTIONS.REPLY_TARGETS:
-          await performTargetedReplies();
-          success = true;
-          break;
         case ACTIONS.POST:
           // For posts, add special error handling to detect image URL issues
           const result = await wisdom_agent.step({ verbose: true });
@@ -115,6 +122,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           success = true;
           break;
         default:
+          // Handle all other actions including REPLY_TARGETS
           await wisdom_agent.step({ verbose: true });
           success = true;
       }
