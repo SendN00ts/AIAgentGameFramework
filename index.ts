@@ -13,10 +13,9 @@ enum ACTIONS {
 let lastPostTime = 0;
 let functionCalledThisCycle = false;
 
-const POST_INTERVAL = 5 * 60 * 1000; // 5 hours for posts
-const OTHER_ACTION_INTERVAL = 5 * 60 * 1000; // 15 minutes for other actions
+const POST_INTERVAL = 2 * 60 * 1000; // 5 hours for posts
+const OTHER_ACTION_INTERVAL = 2 * 60 * 1000; // 15 minutes for other actions
 
-// Track current action in rotation (excluding POST which has its own schedule)
 let currentActionIndex = 0;
 const nonPostActions = [
   ACTIONS.REPLY, 

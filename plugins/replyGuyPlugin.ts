@@ -21,7 +21,6 @@ export function createReplyGuyWorker(apiKey: string, apiSecret: string, accessTo
   // Load target accounts with better error handling
   function loadTargetAccounts(): TargetAccount[] {
     try {
-      // Try different paths to find the file
       const possiblePaths = [
         path.join(process.cwd(), 'targeted_accounts2.json'),
         path.join(process.cwd(), '../targeted_accounts2.json'),
