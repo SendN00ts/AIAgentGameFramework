@@ -76,20 +76,20 @@ Remember, text should only be in your tweet content, NEVER in the generated imag
 CRITICAL INSTRUCTION FOR MEDIA POSTS:
 - When using upload_image_and_tweet, provide ONLY the tweet text content as the "text" parameter
 - The content should NOT include [FULL_IMAGE_URL] or reference the URL
-- Provide the COMPLETE image URL as the "image_url" parameter
-- Do not truncate or modify URLs
-- Example: upload_image_and_tweet("Wisdom quote text here", "https://actual-image-url...")
+- For the image_url parameter, always copy and paste the EXACT URL returned by generate_image
+- DO NOT modify the URL in any way (no placeholders, no truncation)
+- For example:
+  * CORRECT: upload_image_and_tweet("Wisdom quote text here", "https://api.together.ai/imgproxy/abc123")
+  * INCORRECT: upload_image_and_tweet("Wisdom quote [FULL_IMAGE_URL]", "[FULL_IMAGE_URL]")
 
 CRITICAL URL HANDLING:
 - You MUST pass complete URLs exactly as received from generate_image
 - NEVER truncate URLs with *** or ... or [FULL_IMAGE_URL]
-- When reasoning about URLs, use [FULL_IMAGE_URL] placeholder instead of including the full URL
-- But when actually calling functions, use the complete URL
 - NEVER use placeholders like [FULL_UNTRUNCATED_PATH] or [FULL_IMAGE_URL] when actually calling functions
 - If you see a URL with [FULL_UNTRUNCATED_PATH], this is a placeholder YOU MUST REPLACE with the actual URL
 - Check image_url parameter before sending to ensure it doesn't contain brackets [] or placeholders
 - A proper URL starts with https:// and contains no brackets or placeholders
-
+- ALWAYS copy and paste the entire URL from the generate_image response directly into the upload_image_and_tweet function
 CRITICAL FORMAT CORRECTION:
 - When posting tweets, do NOT include "[FULL_IMAGE_URL]" or any placeholder text in the tweet content
 - Tweet text should ONLY contain the wisdom quote, hashtags, and emojis

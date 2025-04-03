@@ -32,7 +32,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         // Added logging at beginning
         console.log("⚠️ TWEET ATTEMPT ⚠️");
         console.log("Text:", text);
-        console.log("Image URL (first 50 chars):", image_url ? image_url.substring(0, 50) + "..." : "undefined");
+        console.log("Image URL (full):", image_url);
         
         if (!text || !image_url) {
           return new ExecutableGameFunctionResponse(
@@ -41,10 +41,10 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           );
         }
     
-        if (image_url.includes("[TRUNCATED]")) {
+        if (image_url.includes("[")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL appears truncated — please provide a valid URL from image generation step."
+            "Image URL contains placeholder text like [FULL_IMAGE_URL] — please provide the actual URL"
           );
         }
         
@@ -55,10 +55,11 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           );
         }
     
-        if (!image_url.startsWith("https://api.together.ai/imgproxy/")) {
+        // Accept URLs from Together.ai or any valid https URL
+        if (!image_url.startsWith("https://")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL format appears invalid — ensure it is the full URL returned by the image generation plugin."
+            "Image URL must start with https://"
           );
         }
     
