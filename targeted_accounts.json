@@ -1,0 +1,62 @@
+{
+    "personal_development": [
+        {"handle": "@JamesClear", "description": "Author of Atomic Habits, sharing insights on habit formation and personal improvement"},
+        {"handle": "@MelRobbins", "description": "Motivational speaker and author focusing on personal development and overcoming self-doubt"},
+        {"handle": "@MarkManson", "description": "Author of 'The Subtle Art of Not Giving a F*ck', providing unconventional life advice"},
+        {"handle": "@KaiSamuels", "description": "Mindset coach specializing in personal growth and mental resilience"},
+        {"handle": "@NicoleLepera", "description": "Holistic psychologist sharing wellness and self-healing strategies"},
+        {"handle": "@TinyBuddha", "description": "Platform sharing simple wisdom for complex lives"},
+        {"handle": "@SarahKatespark", "description": "Life coach focusing on intentional living and personal transformation"},
+        {"handle": "@TheLifeCoachSchool", "description": "Brooke Castillo's platform offering life coaching and mindset strategies"},
+        {"handle": "@JenSincero", "description": "Author of 'You Are a Badass', motivational speaker and success coach"},
+        {"handle": "@BreneBrown", "description": "Research professor, author, and expert on vulnerability and courage"}
+    ],
+    "wellness_and_health": [
+        {"handle": "@DrJenGunter", "description": "OB/GYN and women's health advocate providing evidence-based medical insights"},
+        {"handle": "@mindbodygreen", "description": "Holistic wellness platform sharing nutrition, fitness, and mental health content"},
+        {"handle": "@DrZimney", "description": "Mental health professional offering practical wellness and self-care advice"},
+        {"handle": "@TraumaGeek", "description": "Trauma-informed mental health content creator"},
+        {"handle": "@DrMTalk", "description": "Physician sharing accessible medical information and wellness tips"},
+        {"handle": "@DrSadaphal", "description": "Medical professional providing clear health insights and patient education"},
+        {"handle": "@PriyankaChopra", "description": "Global health advocate and mental wellness supporter"},
+        {"handle": "@wellnesswithnik", "description": "Holistic wellness coach focusing on integrative health approaches"},
+        {"handle": "@DrAdiePerlman", "description": "Functional medicine practitioner sharing holistic health strategies"},
+        {"handle": "@WellnessJourney", "description": "Platform exploring integrative approaches to personal health"}
+    ],
+    "fitness_and_nutrition": [
+        {"handle": "@AlexLucasFitness", "description": "Fitness trainer providing workout tips and nutrition advice"},
+        {"handle": "@NatalieJillFitness", "description": "Fitness over 40 expert, motivational speaker, and body-positive coach"},
+        {"handle": "@BrianWansink", "description": "Nutrition scientist sharing insights on eating behaviors and health"},
+        {"handle": "@FitnessBlender", "description": "Fitness duo sharing accessible workout and nutrition content"},
+        {"handle": "@AdrianLMFT", "description": "Mental health fitness professional combining physical and mental wellness"},
+        {"handle": "@HealthyGamerGG", "description": "Dr. K's platform addressing mental health in fitness and gaming"},
+        {"handle": "@NomadFitness", "description": "Travel-inspired fitness and nutrition advice"},
+        {"handle": "@FunctionalBodyBuilding", "description": "Holistic approach to strength training and functional fitness"},
+        {"handle": "@HolisticHealthHacks", "description": "Practical nutrition and fitness tips for everyday wellness"},
+        {"handle": "@MindfulMuscle", "description": "Integrating mindfulness with physical fitness and nutrition"}
+    ],
+    "mental_health_and_self_care": [
+        {"handle": "@therapydan", "description": "Licensed therapist sharing mental health insights and coping strategies"},
+        {"handle": "@innerchildhealing", "description": "Trauma-informed content about inner child work and healing"},
+        {"handle": "@thegraygang", "description": "Mental health advocate discussing neurodiversity and personal growth"},
+        {"handle": "@selfcaresunday", "description": "Platform dedicated to mental health awareness and self-care practices"},
+        {"handle": "@wholehearted_therapist", "description": "Therapist providing compassionate mental health resources"},
+        {"handle": "@DrTracyMark", "description": "Psychiatrist offering mental health education and support"},
+        {"handle": "@mentalhealthmaven", "description": "Platform breaking down complex mental health topics"},
+        {"handle": "@healingtrauma", "description": "Resources for trauma recovery and emotional healing"},
+        {"handle": "@TherapyForBlackGirls", "description": "Mental health support and resources for Black women"},
+        {"handle": "@anxietysupport", "description": "Community and resources for managing anxiety and stress"}
+    ],
+    "holistic_wellness": [
+        {"handle": "@wellnessbykacie", "description": "Holistic wellness coach focusing on mind-body connection"},
+        {"handle": "@cleanfoodsmind", "description": "Nutritionist sharing clean eating and mental wellness tips"},
+        {"handle": "@embodiedsoul", "description": "Holistic health practitioner exploring mind, body, and spiritual wellness"},
+        {"handle": "@rhythmofhealing", "description": "Alternative health and wellness content creator"},
+        {"handle": "@gentlesoulwellness", "description": "Trauma-informed wellness coach supporting gentle self-transformation"},
+        {"handle": "@holistichealth101", "description": "Comprehensive approach to natural health and wellness"},
+        {"handle": "@urbanshaman", "description": "Modern approach to holistic healing and spiritual wellness"},
+        {"handle": "@consciouslifestyle", "description": "Mindful living and holistic approach to personal development"},
+        {"handle": "@spiritedwellness", "description": "Integrating spiritual practices with physical and mental health"},
+        {"handle": "@wholebody_wellness", "description": "Holistic approach to health covering nutrition, fitness, and mindset"}
+    ]
+}

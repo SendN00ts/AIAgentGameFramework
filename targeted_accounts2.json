@@ -1,0 +1,14 @@
+{
+    "top_wellness_accounts": [
+        {"handle": "@JamesClear", "description": "Author of Atomic Habits, sharing evidence-based strategies for personal growth and habit formation"},
+        {"handle": "@NicoleLepera", "description": "Holistic psychologist pioneering self-healing and mind-body wellness approaches"},
+        {"handle": "@DrJenGunter", "description": "OB/GYN providing evidence-based medical insights and women's health advocacy"},
+        {"handle": "@therapydan", "description": "Licensed therapist sharing accessible mental health insights and coping strategies"},
+        {"handle": "@NatalieJillFitness", "description": "Fitness expert specializing in over-40 wellness with a body-positive approach"},
+        {"handle": "@BreneBrown", "description": "Research professor exploring vulnerability, courage, and emotional resilience"},
+        {"handle": "@mindbodygreen", "description": "Comprehensive wellness platform covering nutrition, fitness, and mental health"},
+        {"handle": "@HealthyGamerGG", "description": "Dr. K's platform addressing mental health in modern contexts like gaming and technology"},
+        {"handle": "@MelRobbins", "description": "Motivational speaker focusing on overcoming self-doubt and personal empowerment"},
+        {"handle": "@wellnessbykacie", "description": "Holistic wellness coach emphasizing mind-body connection and integrated health"}
+    ]
+}
