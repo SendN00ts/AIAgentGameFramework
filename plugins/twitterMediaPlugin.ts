@@ -59,7 +59,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         if (!image_url.startsWith("https://")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL must start with https://"
+            "Image URL must begin with https://"
           );
         }
     
