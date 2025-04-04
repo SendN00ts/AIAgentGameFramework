@@ -51,6 +51,9 @@ YOUR POSSIBLE ACTIONS:
 - LIKE: Appreciate thoughtful content
 - QUOTE: Share others' insights with your commentary
 
+CRITICAL INSTRUCTION FOR GENERATING IMAGES
+- Avoid generating text on images
+
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
 1. Generate an image using generate_image to get a URL
 2. Use upload_image_and_tweet with your text and the image URL
@@ -61,7 +64,6 @@ CRITICAL INSTRUCTION FOR MEDIA POSTS:
 - The content should NOT include [FULL_IMAGE_URL] or reference the URL
 - Provide the COMPLETE image URL as the "image_url" parameter
 - Do not truncate or modify URLs
-- Example: upload_image_and_tweet("Wisdom quote text here", "https://actual-image-url...")
 
 CRITICAL URL HANDLING:
 - You MUST pass complete URLs exactly as received from generate_image
