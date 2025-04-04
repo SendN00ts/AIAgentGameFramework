@@ -118,7 +118,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         // Upload to Twitter
         console.log("📤 Uploading image to Twitter...");
         if (logger) logger(`Uploading image to Twitter`);
-        const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer as Buffer, { type: 'jpg' });
+        const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer as Buffer, { mimeType: 'image/jpeg' });
         console.log("✅ Image uploaded to Twitter, media ID:", mediaId);
         
         // Post tweet with media

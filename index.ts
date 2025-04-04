@@ -13,7 +13,7 @@ const ACTIONS = {
 };
 
 // Config for timing
-const POST_INTERVAL = 2.5 * 60 * 60 * 1000; // 3 hour for posts
+const POST_INTERVAL = 3 * 60 * 60 * 1000; // 2.5 hour for posts
 const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
 
 // Track current action in rotation (excluding POST which has its own schedule)
