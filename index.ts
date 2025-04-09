@@ -1,3 +1,4 @@
+// src/index.ts
 import { wisdom_agent } from './agent';
 import * as http from 'http';
 
@@ -11,14 +12,14 @@ enum ACTIONS {
   QUOTE = 'quote'
 }
 
-// Tracking variables
+// Tracking variables - set lastPostTime to 0 to force an immediate post
 let lastPostTime = 0;
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
 // Config for timing
-const POST_INTERVAL = 3 * 60 * 1000; // 3 minutes for posts (for testing)
+const POST_INTERVAL = 1 * 60 * 1000; // 3 minutes for posts (for testing)
 const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
 
 // Track current action in rotation (excluding POST which has its own schedule)
@@ -35,8 +36,12 @@ function getNextAction(): ACTIONS {
   const now = Date.now();
   const timeSinceLastPost = now - lastPostTime;
   
+  console.log("Time since last post:", Math.round(timeSinceLastPost/1000), "seconds");
+  console.log("POST_INTERVAL:", Math.round(POST_INTERVAL/1000), "seconds");
+  
   // If it's been more than POST_INTERVAL since last post, do a post
   if (timeSinceLastPost >= POST_INTERVAL) {
+    console.log("Time for a new post!");
     // If we've exceeded max retries for image posts, fall back to text-only
     if (imageRetryCount >= MAX_IMAGE_RETRIES) {
       console.log(`⚠️ Max image retries (${MAX_IMAGE_RETRIES}) reached. Posting without image.`);
@@ -59,12 +64,12 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   
   // Create new focused description with proper typing
   const actionDescriptions: Record<ACTIONS, string> = {
-    [ACTIONS.POST]: "POST original music-related content with images",
-    [ACTIONS.POST_NO_IMAGE]: "POST original music-related content WITHOUT an image (use post_tweet directly)",
-    [ACTIONS.REPLY]: "REPLY to existing music conversations",
-    [ACTIONS.SEARCH]: "SEARCH for relevant music discussions",
-    [ACTIONS.LIKE]: "LIKE meaningful music content",
-    [ACTIONS.QUOTE]: "QUOTE other music tweets with your commentary"
+    [ACTIONS.POST]: "Share original wisdom content with images",
+    [ACTIONS.POST_NO_IMAGE]: "POST original wisdom content WITHOUT an image (use post_tweet directly)",
+    [ACTIONS.REPLY]: "Engage with existing philosophical conversations",
+    [ACTIONS.SEARCH]: "SEARCH for relevant wisdom discussions",
+    [ACTIONS.LIKE]: "LIKE meaningful wisdom content",
+    [ACTIONS.QUOTE]: "QUOTE other widom tweets with your commentary"
   };
   
   // Add regeneration hint if needed
@@ -88,17 +93,17 @@ Create high-quality, thoughtful music content that stands on its own without an 
   }
   
   // Update agent's description
-  wisdom_agent.description = `You are a music-sharing Twitter bot that posts about all things music.
+  wisdom_agent.description = `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
 
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
 You operate on a 3-minute schedule. Make your single action count.
 
 YOUR POSSIBLE ACTIONS:
-- POST: Share original music-related content with images
-- REPLY: Engage with existing music conversations
-- SEARCH: Find relevant music discussions
-- LIKE: Appreciate good music content
-- QUOTE: Share others' music insights with your commentary
+- POST: Share original wisdom content with images
+- REPLY: Engage with existing philosophical conversations
+- SEARCH: Find relevant wisdom discussions
+- LIKE: Appreciate thoughtful content
+- QUOTE: Share others' insights with your commentary
 
 CURRENT REQUIRED ACTION: ${action.toUpperCase()}
 
@@ -112,11 +117,11 @@ CRITICAL PROCESS FOR POSTING WITH IMAGES:
 3. Use upload_image_and_tweet with the tweet text and the URL
 
 YOUR CONTENT GUIDELINES:
-- Post about albums celebrating their birthday on the current day
-- Commemorate music legends that have their birthday
-- Post music hot takes
-- Post about new music releases
-- Post music recommendations
+- Post thoughtful content about philosophy, mindfulness, and life wisdom
+- Share timeless quotes from great thinkers
+- Offer practical advice for leading a more meaningful life
+- Create content that inspires reflection and personal growth
+- Balance profound insights with accessible language
 
 ENGAGEMENT STRATEGIES:
 - For threads: Make an initial tweet, then use reply_tweet with the ID from the response
@@ -305,6 +310,9 @@ async function main(): Promise<void> {
     runAgentWithSchedule();
     console.log("Agent scheduler started successfully!");
     
+    // Force an immediate first post
+    console.log("Triggering immediate first post...");
+    
   } catch (error) {
     console.error("ERROR in main function:", error);
     
@@ -318,11 +326,6 @@ async function main(): Promise<void> {
     }, 60000);
   }
 }
-
-
-console.log("Triggering immediate first post...");
-updateAgentForAction(ACTIONS.POST);
-wisdom_agent.step({ verbose: true }).catch(err => console.error("First post failed:", err));
 
 // Run the main function
 main().catch(err => {
