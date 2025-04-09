@@ -319,6 +319,11 @@ async function main(): Promise<void> {
   }
 }
 
+
+console.log("Triggering immediate first post...");
+updateAgentForAction(ACTIONS.POST);
+wisdom_agent.step({ verbose: true }).catch(err => console.error("First post failed:", err));
+
 // Run the main function
 main().catch(err => {
   console.error("Fatal error in main promise chain:", err);
