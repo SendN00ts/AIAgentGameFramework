@@ -96,22 +96,22 @@ ENGAGEMENT STRATEGIES:
 
 REMEMBER: ONE ACTION PER STEP ONLY. Do not attempt multiple actions in a single step.`,
 
-    workers: [
-        twitterWorker,
-        imageGenPlugin.getWorker({}) as any,
-        twitterMediaWorker
-    ],
-    llmModel: LLMModel.DeepSeek_R1,
-    getAgentState: async () => {
-        return {
-            lastPostTime: Date.now(),
-            postsPerStep: 1
-        };
-    }
+workers: [
+    twitterWorker,
+    imageGenPlugin.getWorker({}) as any,
+    twitterMediaWorker
+],
+llmModel: LLMModel.DeepSeek_R1,
+getAgentState: async () => {
+    return {
+        lastPostTime: Date.now(),
+        postsPerStep: 1 
+    };
+}
 });
 
 wisdom_agent.setLogger((agent: any, msg: string) => {
-    console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
-    console.log(msg);
-    console.log("------------------------\n");
+console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
+console.log(msg);
+console.log("------------------------\n");
 });

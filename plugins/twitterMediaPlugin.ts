@@ -1,8 +1,22 @@
 import { GameWorker, GameFunction, ExecutableGameFunctionResponse, ExecutableGameFunctionStatus } from "@virtuals-protocol/game";
 import axios from 'axios';
-import fs from 'fs';
-import path from 'path';
+import * as fs from 'fs';
+import * as path from 'path';
 import { TwitterApi } from 'twitter-api-v2';
+
+// Helper function to extract URL from various sources
+function extractUrlFromResponse(progessMessages: string[]): string | null {
+  // Look for URLs in progress messages
+  for (const msg of progessMessages) {
+    if (msg.includes("URL is:")) {
+      const urlMatch = msg.match(/URL is: (https:\/\/[^\s]+)/);
+      if (urlMatch && urlMatch[1]) {
+        return urlMatch[1];
+      }
+    }
+  }
+  return null;
+}
 
 export function createTwitterMediaWorker(apiKey: string, apiSecret: string, accessToken: string, accessSecret: string) {
   const twitterClient = new TwitterApi({
@@ -32,7 +46,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         // Added logging at beginning
         console.log("⚠️ TWEET ATTEMPT ⚠️");
         console.log("Text:", text);
-        console.log("Image URL (first 50 chars):", image_url ? image_url.substring(0, 50) + "..." : "undefined");
+        console.log("Image URL (first 100 chars):", image_url ? image_url.substring(0, 100) + "..." : "undefined");
         
         if (!text || !image_url) {
           return new ExecutableGameFunctionResponse(
@@ -41,10 +55,10 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           );
         }
     
-        if (image_url.includes("[TRUNCATED]")) {
+        if (image_url.includes("[")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL appears truncated — please provide a valid URL from image generation step."
+            "Image URL contains placeholder text like [FULL_IMAGE_URL] — please provide the actual URL"
           );
         }
         
@@ -55,10 +69,11 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
           );
         }
     
-        if (!image_url.startsWith("https://api.together.ai/imgproxy/")) {
+        // Accept any HTTPS URL, not just Together.ai
+        if (!image_url.startsWith("https://")) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL format appears invalid — ensure it is the full URL returned by the image generation plugin."
+            "Image URL must start with https://"
           );
         }
     
@@ -118,7 +133,12 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         // Upload to Twitter
         console.log("📤 Uploading image to Twitter...");
         if (logger) logger(`Uploading image to Twitter`);
-        const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer as Buffer, { mimeType: 'image/jpeg' });
+        
+        // Use mimeType instead of type (per deprecation warning)
+        const mediaId = await twitterClient.v1.uploadMedia(mediaBuffer as Buffer, { 
+          mimeType: 'image/jpeg' 
+        });
+        
         console.log("✅ Image uploaded to Twitter, media ID:", mediaId);
         
         // Post tweet with media
