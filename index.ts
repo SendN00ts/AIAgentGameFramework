@@ -1,5 +1,5 @@
-// src/index.ts
 import { wisdom_agent } from './agent';
+import * as http from 'http';
 
 // Define actions as an enum to ensure type safety
 enum ACTIONS {
@@ -18,7 +18,7 @@ let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
 // Config for timing
-const POST_INTERVAL = 2 * 60 * 1000; // 3 minutes for posts (for testing)
+const POST_INTERVAL = 3 * 60 * 1000; // 3 minutes for posts (for testing)
 const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
 
 // Track current action in rotation (excluding POST which has its own schedule)
@@ -59,12 +59,12 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   
   // Create new focused description with proper typing
   const actionDescriptions: Record<ACTIONS, string> = {
-    [ACTIONS.POST]: "Share original wisdom content with images",
-    [ACTIONS.POST_NO_IMAGE]: "POST original wisdom content WITHOUT an image (use post_tweet directly)",
-    [ACTIONS.REPLY]: "Engage with existing philosophical conversations",
-    [ACTIONS.SEARCH]: "SEARCH for relevant wisdom discussions",
-    [ACTIONS.LIKE]: "LIKE meaningful wisdom content",
-    [ACTIONS.QUOTE]: "QUOTE other widom tweets with your commentary"
+    [ACTIONS.POST]: "POST original music-related content with images",
+    [ACTIONS.POST_NO_IMAGE]: "POST original music-related content WITHOUT an image (use post_tweet directly)",
+    [ACTIONS.REPLY]: "REPLY to existing music conversations",
+    [ACTIONS.SEARCH]: "SEARCH for relevant music discussions",
+    [ACTIONS.LIKE]: "LIKE meaningful music content",
+    [ACTIONS.QUOTE]: "QUOTE other music tweets with your commentary"
   };
   
   // Add regeneration hint if needed
@@ -88,17 +88,17 @@ Create high-quality, thoughtful music content that stands on its own without an 
   }
   
   // Update agent's description
-  wisdom_agent.description = `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
+  wisdom_agent.description = `You are a music-sharing Twitter bot that posts about all things music.
 
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
 You operate on a 3-minute schedule. Make your single action count.
 
 YOUR POSSIBLE ACTIONS:
-- POST: Share original wisdom content with images
-- REPLY: Engage with existing philosophical conversations
-- SEARCH: Find relevant wisdom discussions
-- LIKE: Appreciate thoughtful content
-- QUOTE: Share others' insights with your commentary
+- POST: Share original music-related content with images
+- REPLY: Engage with existing music conversations
+- SEARCH: Find relevant music discussions
+- LIKE: Appreciate good music content
+- QUOTE: Share others' music insights with your commentary
 
 CURRENT REQUIRED ACTION: ${action.toUpperCase()}
 
@@ -112,11 +112,11 @@ CRITICAL PROCESS FOR POSTING WITH IMAGES:
 3. Use upload_image_and_tweet with the tweet text and the URL
 
 YOUR CONTENT GUIDELINES:
-- Post thoughtful content about philosophy, mindfulness, and life wisdom
-- Share timeless quotes from great thinkers
-- Offer practical advice for leading a more meaningful life
-- Create content that inspires reflection and personal growth
-- Balance profound insights with accessible language
+- Post about albums celebrating their birthday on the current day
+- Commemorate music legends that have their birthday
+- Post music hot takes
+- Post about new music releases
+- Post music recommendations
 
 ENGAGEMENT STRATEGIES:
 - For threads: Make an initial tweet, then use reply_tweet with the ID from the response
@@ -240,29 +240,87 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
   }
 }
 
+// Create a simple HTTP server to keep the process alive
+const server = http.createServer((req, res) => {
+  res.writeHead(200, {'Content-Type': 'text/plain'});
+  res.end('wisdom Music Bot is running\n');
+});
+
+// Set up process error handlers
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+  // Don't exit, let the bot continue
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  // Don't exit, let the bot continue
+});
+
+// Heartbeat to show the process is still alive
+setInterval(() => {
+  console.log('Heartbeat check:', new Date().toISOString());
+}, 60000);
+
 async function main(): Promise<void> {
   try {
+    console.log("=======================================");
     console.log("Initializing Music Twitter Bot...");
+    console.log("=======================================");
+    
+    // Log environment details
+    console.log("Environment check:");
+    console.log("NODE_ENV:", process.env.NODE_ENV);
+    console.log("API_KEY present:", !!process.env.API_KEY);
+    console.log("TWITTER_API_KEY present:", !!process.env.TWITTER_API_KEY);
+    console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
     
     // Sanitize description
     const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
     wisdom_agent.description = sanitizedDescription;
     
-    await wisdom_agent.init();
-    console.log("Music Twitter Bot initialized successfully!");
+    try {
+      // Initialize the agent
+      console.log("Initializing agent...");
+      await wisdom_agent.init();
+      console.log("Agent initialization successful!");
+    } catch (initError) {
+      console.error("Failed to initialize agent:", initError);
+      console.error("Will attempt to continue anyway...");
+    }
     
     // Log available functions
     console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>
       w.functions.map((f: any) => f.name)
     ));
+    
+    // Start the HTTP server
+    const PORT = process.env.PORT || 3000;
+    server.listen(PORT, () => {
+      console.log(`HTTP server listening on port ${PORT}`);
+    });
 
+    console.log("Starting agent scheduler...");
     // Start scheduling
     runAgentWithSchedule();
+    console.log("Agent scheduler started successfully!");
     
   } catch (error) {
-    console.error("Failed to initialize agent:", error);
-    process.exit(1);
+    console.error("ERROR in main function:", error);
+    
+    // Instead of exiting, keep the process running but log the error
+    console.error("Bot encountered an error but will continue running.");
+    
+    // Try to restart the scheduler after a delay
+    setTimeout(() => {
+      console.log("Attempting to restart agent scheduler...");
+      runAgentWithSchedule();
+    }, 60000);
   }
 }
 
-main();
+// Run the main function
+main().catch(err => {
+  console.error("Fatal error in main promise chain:", err);
+  // Don't exit even on fatal errors
+});
