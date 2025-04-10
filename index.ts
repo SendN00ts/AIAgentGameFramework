@@ -1,4 +1,3 @@
-// src/index.ts
 import { wisdom_agent } from './agent';
 import * as http from 'http';
 
@@ -7,6 +6,7 @@ enum ACTIONS {
   POST = 'post',
   POST_NO_IMAGE = 'post_no_image',
   REPLY = 'reply',
+  REPLY_TARGETS = 'reply_targets',
   SEARCH = 'search',
   LIKE = 'like',
   QUOTE = 'quote'
@@ -19,13 +19,14 @@ let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
 // Config for timing
-const POST_INTERVAL = 1 * 60 * 1000; // 3 minutes for posts (for testing)
+const POST_INTERVAL = 5 * 60 * 1000; // 5 minutes for posts
 const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
 
 // Track current action in rotation (excluding POST which has its own schedule)
 let currentActionIndex = 0;
 const nonPostActions = [
   ACTIONS.REPLY, 
+  ACTIONS.REPLY_TARGETS,
   ACTIONS.SEARCH, 
   ACTIONS.LIKE, 
   ACTIONS.QUOTE
@@ -64,12 +65,13 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   
   // Create new focused description with proper typing
   const actionDescriptions: Record<ACTIONS, string> = {
-    [ACTIONS.POST]: "Share original wisdom content with images",
+    [ACTIONS.POST]: "POST original wisdom content with images",
     [ACTIONS.POST_NO_IMAGE]: "POST original wisdom content WITHOUT an image (use post_tweet directly)",
-    [ACTIONS.REPLY]: "Engage with existing philosophical conversations",
+    [ACTIONS.REPLY]: "REPLY to existing philosophical conversations",
+    [ACTIONS.REPLY_TARGETS]: "REPLY to wellness and philosophy accounts (use find_target_account and reply_tweet)",
     [ACTIONS.SEARCH]: "SEARCH for relevant wisdom discussions",
-    [ACTIONS.LIKE]: "LIKE meaningful wisdom content",
-    [ACTIONS.QUOTE]: "QUOTE other widom tweets with your commentary"
+    [ACTIONS.LIKE]: "LIKE meaningful philosophical content",
+    [ACTIONS.QUOTE]: "QUOTE other wisdom tweets with your commentary"
   };
   
   // Add regeneration hint if needed
@@ -80,6 +82,7 @@ IMPORTANT: Previous attempt failed due to image URL issues (attempt ${imageRetry
 Please generate a FRESH NEW IMAGE using generate_image before posting.
 DO NOT reuse previous image URLs. Generate a completely new image with a simpler prompt.
 Use simpler image descriptions with fewer details for more reliable processing.
+REMEMBER to get the image URL using get_latest_image_url() after generating the image.
 `;
   }
 
@@ -87,8 +90,19 @@ Use simpler image descriptions with fewer details for more reliable processing.
     additionalInstructions = `
 IMPORTANT: After several failed attempts with images, you should post text-only content.
 DO NOT use generate_image or try to include an image.
-Use the post_tweet function directly with your music content.
-Create high-quality, thoughtful music content that stands on its own without an image.
+Use the post_tweet function directly with your wisdom content.
+Create high-quality, thoughtful content that stands on its own without an image.
+`;
+  }
+
+  if (action === ACTIONS.REPLY_TARGETS) {
+    additionalInstructions = `
+IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
+1. First use find_target_account to get information about a target wellness account and their latest tweet
+2. Review the account description and tweet content carefully
+3. Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
+4. Be authentic, supportive and natural in your reply
+5. Keep replies concise (1-3 sentences) and include 1-2 relevant hashtags
 `;
   }
   
@@ -96,7 +110,7 @@ Create high-quality, thoughtful music content that stands on its own without an 
   wisdom_agent.description = `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
 
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
-You operate on a 3-minute schedule. Make your single action count.
+You operate on a 1-minute schedule. Make your single action count.
 
 YOUR POSSIBLE ACTIONS:
 - POST: Share original wisdom content with images
@@ -104,6 +118,7 @@ YOUR POSSIBLE ACTIONS:
 - SEARCH: Find relevant wisdom discussions
 - LIKE: Appreciate thoughtful content
 - QUOTE: Share others' insights with your commentary
+- REPLY_TO_TARGET: Reply to wellness and philosophy accounts to build connections
 
 CURRENT REQUIRED ACTION: ${action.toUpperCase()}
 
@@ -112,9 +127,9 @@ ${additionalInstructions}
 All other actions are forbidden in this cycle.
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, use generate_image with a music-related prompt
-2. Copy the EXACT URL from the response
-3. Use upload_image_and_tweet with the tweet text and the URL
+1. First, use generate_image with a prompt for a nature scene or abstract pattern
+2. After generating the image, use get_latest_image_url to retrieve the correct image URL
+3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
 YOUR CONTENT GUIDELINES:
 - Post thoughtful content about philosophy, mindfulness, and life wisdom
@@ -124,10 +139,9 @@ YOUR CONTENT GUIDELINES:
 - Balance profound insights with accessible language
 
 ENGAGEMENT STRATEGIES:
-- For threads: Make an initial tweet, then use reply_tweet with the ID from the response
+- For threads: Make an initial tweet, then reply with the ID from the response
 - For engagement: Reply to mentions with additional insights
-- For discovery: Search for trending topics using search_tweets
-- For relationship building: Like tweets from users who engage with your content
+- For discovery: Search for trending topics
 - Use emojis to make your posts more lively
 
 REMEMBER: ONE ACTION PER STEP ONLY. Do not attempt multiple actions in a single step.`;
@@ -161,7 +175,8 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
              (result.includes("invalid image URL") || 
               result.includes("Image URL") || 
               result.includes("URL format") ||
-              result.includes("403 Forbidden"))) {
+              result.includes("403 Forbidden") ||
+              result.includes("ENOTFOUND"))) {
             
             // Increment retry counter
             imageRetryCount++;
@@ -202,6 +217,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           typeof actionError.message === 'string' && 
           (actionError.message.includes("Image URL") || 
            actionError.message.includes("URL format") ||
+           actionError.message.includes("ENOTFOUND") ||
            actionError.message.includes("403 Forbidden"))) {
         
         if (imageRetryCount < MAX_IMAGE_RETRIES) {
@@ -223,7 +239,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     // If this was a successful post, update last post time
     if ((nextAction === ACTIONS.POST || nextAction === ACTIONS.POST_NO_IMAGE) && success) {
       lastPostTime = Date.now();
-      console.log("Post completed. Next post in 3 minutes.");
+      console.log("Post completed. Next post in 5 minutes.");
     }
     
     // Schedule next action
@@ -248,7 +264,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
 // Create a simple HTTP server to keep the process alive
 const server = http.createServer((req, res) => {
   res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('wisdom Music Bot is running\n');
+  res.end('Wisdom Bot is running\n');
 });
 
 // Set up process error handlers
@@ -262,73 +278,6 @@ process.on('unhandledRejection', (reason, promise) => {
   // Don't exit, let the bot continue
 });
 
-// Heartbeat to show the process is still alive
 setInterval(() => {
   console.log('Heartbeat check:', new Date().toISOString());
 }, 60000);
-
-async function main(): Promise<void> {
-  try {
-    console.log("=======================================");
-    console.log("Initializing Music Twitter Bot...");
-    console.log("=======================================");
-    
-    // Log environment details
-    console.log("Environment check:");
-    console.log("NODE_ENV:", process.env.NODE_ENV);
-    console.log("API_KEY present:", !!process.env.API_KEY);
-    console.log("TWITTER_API_KEY present:", !!process.env.TWITTER_API_KEY);
-    console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
-    
-    // Sanitize description
-    const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
-    wisdom_agent.description = sanitizedDescription;
-    
-    try {
-      // Initialize the agent
-      console.log("Initializing agent...");
-      await wisdom_agent.init();
-      console.log("Agent initialization successful!");
-    } catch (initError) {
-      console.error("Failed to initialize agent:", initError);
-      console.error("Will attempt to continue anyway...");
-    }
-    
-    // Log available functions
-    console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>
-      w.functions.map((f: any) => f.name)
-    ));
-    
-    // Start the HTTP server
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      console.log(`HTTP server listening on port ${PORT}`);
-    });
-
-    console.log("Starting agent scheduler...");
-    // Start scheduling
-    runAgentWithSchedule();
-    console.log("Agent scheduler started successfully!");
-    
-    // Force an immediate first post
-    console.log("Triggering immediate first post...");
-    
-  } catch (error) {
-    console.error("ERROR in main function:", error);
-    
-    // Instead of exiting, keep the process running but log the error
-    console.error("Bot encountered an error but will continue running.");
-    
-    // Try to restart the scheduler after a delay
-    setTimeout(() => {
-      console.log("Attempting to restart agent scheduler...");
-      runAgentWithSchedule();
-    }, 60000);
-  }
-}
-
-// Run the main function
-main().catch(err => {
-  console.error("Fatal error in main promise chain:", err);
-  // Don't exit even on fatal errors
-});

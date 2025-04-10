@@ -3,20 +3,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TwitterApi } from 'twitter-api-v2';
-
-// Helper function to extract URL from various sources
-function extractUrlFromResponse(progessMessages: string[]): string | null {
-  // Look for URLs in progress messages
-  for (const msg of progessMessages) {
-    if (msg.includes("URL is:")) {
-      const urlMatch = msg.match(/URL is: (https:\/\/[^\s]+)/);
-      if (urlMatch && urlMatch[1]) {
-        return urlMatch[1];
-      }
-    }
-  }
-  return null;
-}
+import { getLastImageUrl } from './imageUrlHandler';
 
 export function createTwitterMediaWorker(apiKey: string, apiSecret: string, accessToken: string, accessSecret: string) {
   const twitterClient = new TwitterApi({
@@ -30,6 +17,32 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
   const tmpDir = path.resolve(process.cwd(), 'tmp');
   if (!fs.existsSync(tmpDir)) {
     fs.mkdirSync(tmpDir, { recursive: true });
+  }
+
+  // Function to validate image URL
+  function validateAndFixImageUrl(providedUrl?: string): string | null {
+    // If URL is missing, invalid, or contains placeholders
+    if (!providedUrl || 
+        providedUrl.includes("[") || 
+        providedUrl.includes("generated.image") ||
+        !providedUrl.startsWith("https://") ||
+        providedUrl.endsWith("...")) {
+      
+      console.log("⚠️ Invalid image URL detected:", providedUrl);
+      
+      // Try to use the stored URL
+      const storedUrl = getLastImageUrl();
+      if (storedUrl) {
+        console.log("✅ Using stored image URL instead:", storedUrl);
+        return storedUrl;
+      } else {
+        console.log("❌ No stored URL available");
+        return null;
+      }
+    }
+    
+    // URL seems valid
+    return providedUrl;
   }
 
   const uploadImageAndTweet = new GameFunction({
@@ -48,39 +61,27 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         console.log("Text:", text);
         console.log("Image URL (first 100 chars):", image_url ? image_url.substring(0, 100) + "..." : "undefined");
         
-        if (!text || !image_url) {
+        if (!text) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Tweet text and image URL are required"
-          );
-        }
-    
-        if (image_url.includes("[")) {
-          return new ExecutableGameFunctionResponse(
-            ExecutableGameFunctionStatus.Failed,
-            "Image URL contains placeholder text like [FULL_IMAGE_URL] — please provide the actual URL"
+            "Tweet text is required"
           );
         }
         
-        if (image_url.endsWith("...") || image_url.includes("/...") || image_url.includes("***")) {
+        // Validate and fix the image URL
+        const finalImageUrl = validateAndFixImageUrl(image_url);
+        
+        if (!finalImageUrl) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Image URL appears truncated with '...' or '***' — ensure full URL is properly passed"
+            "No valid image URL provided and no stored URL available. Generate an image first."
           );
         }
     
-        // Accept any HTTPS URL, not just Together.ai
-        if (!image_url.startsWith("https://")) {
-          return new ExecutableGameFunctionResponse(
-            ExecutableGameFunctionStatus.Failed,
-            "Image URL must start with https://"
-          );
-        }
-    
-        console.log("📸 Full image URL used:", image_url);
+        console.log("📸 Final image URL used:", finalImageUrl);
         
         // Download with retry logic
-        if (logger) logger(`Downloading image from ${image_url}`);
+        if (logger) logger(`Downloading image from ${finalImageUrl}`);
         console.log("📥 Attempting image download...");
         
         let mediaBuffer;
@@ -89,7 +90,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
         
         while (retryCount < maxRetries) {
           try {
-            const imageResponse = await axios.get(image_url, { 
+            const imageResponse = await axios.get(finalImageUrl, { 
               responseType: 'arraybuffer',
               timeout: 15000,
               maxRedirects: 5,

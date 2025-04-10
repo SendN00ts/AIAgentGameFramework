@@ -2,6 +2,8 @@ import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
 import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import { createTwitterMediaWorker } from './plugins/twitterMediaPlugin';
+import { createEnhancedImageGenPlugin } from './plugins/modified-image-gen-plugin';
+import { createImageUrlHandlerWorker } from './plugins/imageUrlHandler';
 import dotenv from "dotenv";
 dotenv.config();
 
@@ -16,8 +18,8 @@ if (!process.env.TOGETHER_API_KEY) {
     throw new Error('TOGETHER_API_KEY is required in environment variables');
 }
 
-// Create image generation plugin
-const imageGenPlugin = new ImageGenPlugin({
+// Create image generation plugin configuration
+const imageGenConfig = {
     id: "wisdom_image_gen",
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
@@ -25,7 +27,13 @@ const imageGenPlugin = new ImageGenPlugin({
         apiKey: process.env.TOGETHER_API_KEY || '',
         baseApiUrl: "https://api.together.xyz/v1/images/generations"
     }
-});
+};
+
+// Create enhanced image generation worker that captures URLs
+const enhancedImageGenWorker = createEnhancedImageGenPlugin(imageGenConfig);
+
+// Create image URL handler worker
+const imageUrlHandlerWorker = createImageUrlHandlerWorker();
 
 const twitterMediaWorker = createTwitterMediaWorker(
     process.env.TWITTER_API_KEY!,
@@ -50,36 +58,27 @@ YOUR POSSIBLE ACTIONS:
 - SEARCH: Find relevant wisdom discussions
 - LIKE: Appreciate thoughtful content
 - QUOTE: Share others' insights with your commentary
-
-CRITICAL INSTRUCTION FOR GENERATING IMAGES
-- Avoid generating text on images
+- REPLY_TO_TARGET: Reply to wellness and philosophy accounts to build connections
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. Generate an image using generate_image to get a URL
-2. Use upload_image_and_tweet with your text and the image URL
-3. The image will be properly attached to your tweet
+1. First, use generate_image with a prompt for a nature scene or abstract pattern
+2. After generating the image, use get_latest_image_url to retrieve the correct image URL
+3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
-CRITICAL INSTRUCTION FOR MEDIA POSTS:
-- When using upload_image_and_tweet, provide ONLY the tweet text content as the "text" parameter
-- The content should NOT include [FULL_IMAGE_URL] or reference the URL
-- Provide the COMPLETE image URL as the "image_url" parameter
-- Do not truncate or modify URLs
+CRITICAL IMAGE POSTING EXAMPLE:
+- Step 1: generate_image("serene mountain at dawn")
+- Step 2: url = get_latest_image_url()
+- Step 3: upload_image_and_tweet("The journey of a thousand miles begins with a single step. #Wisdom #Philosophy", url)
 
-CRITICAL URL HANDLING:
-- You MUST pass complete URLs exactly as received from generate_image
-- NEVER truncate URLs with *** or ... or [FULL_IMAGE_URL]
-- When reasoning about URLs, use [FULL_IMAGE_URL] placeholder instead of including the full URL
-- But when actually calling functions, use the complete URL
-- NEVER use placeholders like [FULL_UNTRUNCATED_PATH] or [FULL_IMAGE_URL] when actually calling functions
-- If you see a URL with [FULL_UNTRUNCATED_PATH], this is a placeholder YOU MUST REPLACE with the actual URL
-- Check image_url parameter before sending to ensure it doesn't contain brackets [] or placeholders
-- A proper URL starts with https:// and contains no brackets or placeholders
+DO NOT create your own URLs. ALWAYS use get_latest_image_url() to get the correct image URL.
 
-CRITICAL FORMAT CORRECTION:
-- When posting tweets, do NOT include "[FULL_IMAGE_URL]" or any placeholder text in the tweet content
-- Tweet text should ONLY contain the wisdom quote, hashtags, and emojis
-- The image_url parameter should contain the complete image URL
-- Example correct format: upload_image_and_tweet("Wisdom quote with #hashtags", "https://actual-image-url...")
+CRITICAL PROCESS FOR REPLY_TO_TARGET ACTION:
+- First use find_target_account to get information about a target account and their latest tweet
+- Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
+- Mention topics relevant to the account's description and tweet content
+- Be authentic, supportive, and natural in your reply
+- Keep replies concise (1-3 sentences)
+- Include 1-2 relevant hashtags
 
 YOUR CONTENT GUIDELINES:
 - Post thoughtful content about philosophy, mindfulness, and life wisdom
@@ -96,22 +95,23 @@ ENGAGEMENT STRATEGIES:
 
 REMEMBER: ONE ACTION PER STEP ONLY. Do not attempt multiple actions in a single step.`,
 
-workers: [
-    twitterWorker,
-    imageGenPlugin.getWorker({}) as any,
-    twitterMediaWorker
-],
-llmModel: LLMModel.DeepSeek_R1,
-getAgentState: async () => {
-    return {
-        lastPostTime: Date.now(),
-        postsPerStep: 1 
-    };
-}
+    workers: [
+        twitterWorker,
+        enhancedImageGenWorker,
+        twitterMediaWorker,
+        imageUrlHandlerWorker,
+    ],
+    llmModel: LLMModel.DeepSeek_R1,
+    getAgentState: async () => {
+        return {
+            lastPostTime: Date.now(),
+            postsPerStep: 1
+        };
+    }
 });
 
 wisdom_agent.setLogger((agent: any, msg: string) => {
-console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
-console.log(msg);
-console.log("------------------------\n");
+    console.log(`🧠 [${agent.name}] ${new Date().toISOString()}`);
+    console.log(msg);
+    console.log("------------------------\n");
 });
