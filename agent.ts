@@ -52,6 +52,8 @@ export const wisdom_agent = new GameAgent(process.env.API_KEY, {
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
 You operate on a 1-minute schedule. Make your single action count.
 
+IMPORTANT: Always check if your previous action succeeded based on system feedback, not your own recollection. If the system confirms an image was generated, consider it a success.
+
 YOUR POSSIBLE ACTIONS:
 - POST: Share original wisdom content with images
 - REPLY: Engage with existing philosophical conversations

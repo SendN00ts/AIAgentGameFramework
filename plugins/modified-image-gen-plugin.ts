@@ -1,7 +1,6 @@
 import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import { storeImageUrl, getLastImageUrl } from './imageUrlHandler';
 
-
 // Create a function to wrap the default image generator with URL capturing
 export function createEnhancedImageGenPlugin(config: any) {
   // Create the original plugin
