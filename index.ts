@@ -102,7 +102,7 @@ IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
 2. Review the account description and tweet content carefully
 3. Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
 4. Be authentic, supportive and natural in your reply
-5. Keep replies concise (1-3 sentences) and include 1-2 relevant hashtags
+5. Keep replies concise (1-3 sentences)
 `;
   }
   

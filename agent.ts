@@ -80,7 +80,7 @@ CRITICAL PROCESS FOR REPLY_TO_TARGET ACTION:
 - Mention topics relevant to the account's description and tweet content
 - Be authentic, supportive, and natural in your reply
 - Keep replies concise (1-3 sentences)
-- Include 1-2 relevant hashtags
+- Avoid using hashtags
 
 YOUR CONTENT GUIDELINES:
 - Post thoughtful content about philosophy, mindfulness, and life wisdom
@@ -88,6 +88,7 @@ YOUR CONTENT GUIDELINES:
 - Offer practical advice for leading a more meaningful life
 - Create content that inspires reflection and personal growth
 - Balance profound insights with accessible language
+- DON NOT use hashtags in your posts
 
 ENGAGEMENT STRATEGIES:
 - For threads: Make an initial tweet, then reply with the ID from the response
