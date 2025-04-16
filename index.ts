@@ -18,9 +18,9 @@ let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
-// Config for timing
-const POST_INTERVAL = 1 * 60 * 1000; // 1 minutes for posts
-const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
+// Config for timing - changed to 1 minute for both intervals
+const POST_INTERVAL = 1 * 60 * 1000; // 1 minute for posts
+const OTHER_ACTION_INTERVAL = 1 * 60 * 1000; // 1 minute for other actions
 
 // Track current action in rotation (excluding POST which has its own schedule)
 let currentActionIndex = 0;
@@ -82,6 +82,7 @@ IMPORTANT: Previous attempt failed due to image URL issues (attempt ${imageRetry
 Please generate a FRESH NEW IMAGE using generate_image before posting.
 DO NOT reuse previous image URLs. Generate a completely new image with a simpler prompt.
 Use simpler image descriptions with fewer details for more reliable processing.
+Use smaller image dimensions (width=768, height=768) for better reliability.
 REMEMBER to get the image URL using get_latest_image_url() after generating the image.
 `;
   }
@@ -127,7 +128,7 @@ ${additionalInstructions}
 All other actions are forbidden in this cycle.
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, use generate_image with a prompt for a nature scene or abstract pattern
+1. First, use generate_image with a prompt for a nature scene or abstract pattern (with width=768, height=768)
 2. After generating the image, use get_latest_image_url to retrieve the correct image URL
 3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
@@ -244,10 +245,9 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     // If this was a successful post, update last post time
     if ((nextAction === ACTIONS.POST || nextAction === ACTIONS.POST_NO_IMAGE) && success) {
       lastPostTime = Date.now();
-      console.log("Post completed. Next post in 5 minutes.");
+      console.log("Post completed. Next post in 1 minute.");
     }
     
-    // Schedule next action
     console.log(`Scheduling next action in ${OTHER_ACTION_INTERVAL/1000} seconds`);
     setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
     

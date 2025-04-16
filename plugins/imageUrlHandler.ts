@@ -24,7 +24,7 @@ export async function shortenUrl(longUrl: string): Promise<string> {
     return response.data;
   } catch (error) {
     console.error('Error shortening URL:', error);
-    return longUrl; // Return original URL if shortening fails
+    return longUrl; 
   }
 }
 
