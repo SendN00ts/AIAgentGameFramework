@@ -19,7 +19,7 @@ let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
 // Config for timing
-const POST_INTERVAL = 1 * 60 * 1000; // 5 minutes for posts
+const POST_INTERVAL = 1 * 60 * 1000; // 1 minutes for posts
 const OTHER_ACTION_INTERVAL = 15 * 60 * 1000; // 15 minutes for other actions
 
 // Track current action in rotation (excluding POST which has its own schedule)
@@ -347,7 +347,6 @@ async function main(): Promise<void> {
   } catch (error) {
     console.error("ERROR in main function:", error);
     
-    // Try to restart the scheduler after a delay even if initialization failed
     console.log("Will attempt restart in 60 seconds despite error");
     setTimeout(() => {
       console.log("Attempting to restart agent scheduler...");

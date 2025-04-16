@@ -3,9 +3,18 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TwitterApi } from 'twitter-api-v2';
-import { getLastImageUrl } from './imageUrlHandler';
+import { getLastImageUrl, storeImageUrl } from './imageUrlHandler';
 
-export function createTwitterMediaWorker(apiKey: string, apiSecret: string, accessToken: string, accessSecret: string) {
+declare global {
+  var activeAgent: any;
+}
+
+export function createTwitterMediaWorker(
+  apiKey: string, 
+  apiSecret: string, 
+  accessToken: string, 
+  accessSecret: string
+): GameWorker {
   const twitterClient = new TwitterApi({
     appKey: apiKey,
     appSecret: apiSecret,
@@ -13,15 +22,12 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
     accessSecret: accessSecret,
   });
 
-  // Create tmp directory for temporary files
   const tmpDir = path.resolve(process.cwd(), 'tmp');
   if (!fs.existsSync(tmpDir)) {
     fs.mkdirSync(tmpDir, { recursive: true });
   }
 
-  // Function to validate image URL
   function validateAndFixImageUrl(providedUrl?: string): string | null {
-    // If URL is missing, invalid, or contains placeholders
     if (!providedUrl || 
         providedUrl.includes("[") || 
         providedUrl.includes("generated.image") ||
@@ -52,7 +58,7 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
       { name: "text", description: "The tweet text content" },
       { name: "image_url", description: "The URL of the image to upload" },
     ],
-    executable: async (args: {text?: string, image_url?: string}, logger?: (msg: string) => void) => {
+    executable: async (args: {text?: string, image_url?: string}, logger?: ((msg: string) => void) | null) => {
       try {
         const { text, image_url } = args;
         
@@ -167,10 +173,134 @@ export function createTwitterMediaWorker(apiKey: string, apiSecret: string, acce
     }
   });
 
+  // Combined function that handles both image generation and tweet posting
+  const generateAndTweet = new GameFunction({
+    name: "generate_and_tweet",
+    description: "Generate an image and immediately post a tweet with it in a single step",
+    args: [
+      { name: "prompt", description: "The image generation prompt" },
+      { name: "tweet_text", description: "The tweet text content" }
+    ],
+    executable: async (args: {prompt?: string, tweet_text?: string}, logger?: ((msg: string) => void) | null) => {
+      try {
+        const { prompt, tweet_text } = args;
+        
+        if (!prompt || !tweet_text) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Both image prompt and tweet text are required"
+          );
+        }
+        
+        console.log("🔄 Combined generate_and_tweet starting...");
+        if (logger) logger(`Starting combined image generation and tweet posting`);
+        
+        // Get all workers from current application context
+        let imageGenWorker = null;
+        
+        // Try to find through any available context methods
+        if (typeof global !== 'undefined' && global.activeAgent && global.activeAgent.workers) {
+          const workers = global.activeAgent.workers;
+          imageGenWorker = workers.find((w: any) => 
+            (w.id && w.id.includes('image_gen')) || 
+            (w.name && typeof w.name === 'string' && w.name.includes('Image Generator'))
+          );
+          console.log("Found image gen worker through global context");
+        }
+        
+        if (!imageGenWorker) {
+          console.error("Image generation worker not found");
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Image generation worker not found. Try using generate_image and upload_image_and_tweet separately."
+          );
+        }
+        
+        // Find the generate_image function
+        const generateImageFunction = imageGenWorker.functions.find((f: any) => f.name === "generate_image");
+        
+        if (!generateImageFunction) {
+          console.error("generate_image function not found");
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Image generation function not found. Try using generate_image and upload_image_and_tweet separately."
+          );
+        }
+        
+        // Generate the image
+        console.log(`🖼️ Generating image with prompt: "${prompt}"`);
+        if (logger) logger(`Generating image with prompt: ${prompt}`);
+        
+        const genResult = await generateImageFunction.executable({ prompt }, logger);
+        
+        console.log("Generation result type:", typeof genResult);
+        console.log("Generation result keys:", Object.keys(genResult || {}));
+        
+        // Extract URL directly from generation result
+        let imageUrl = null;
+        
+        // Try to extract from feedback_message
+        if (genResult && (genResult as any).feedback_message) {
+          const feedbackMessage = (genResult as any).feedback_message;
+          const urlMatch = feedbackMessage.match(/URL is: (https:\/\/[^\s]+)/);
+          if (urlMatch && urlMatch[1]) {
+            imageUrl = urlMatch[1];
+            console.log("✅ Extracted URL from feedback_message:", imageUrl);
+            // Store the URL for potential future use
+            storeImageUrl(imageUrl);
+          }
+        }
+        
+        // If not found in feedback, try looking in the entire result
+        if (!imageUrl) {
+          const resultStr = JSON.stringify(genResult);
+          const urlMatches = resultStr.match(/https:\/\/api\.together\.ai\/imgproxy\/[^"\\]+/);
+          if (urlMatches && urlMatches[0]) {
+            imageUrl = urlMatches[0];
+            console.log("✅ Extracted URL from result string:", imageUrl);
+            // Store the URL for potential future use
+            storeImageUrl(imageUrl);
+          }
+        }
+        
+        if (!imageUrl) {
+          imageUrl = getLastImageUrl();
+          if (imageUrl) {
+            console.log("✅ Using previously stored URL:", imageUrl);
+          }
+        }
+        
+        if (!imageUrl) {
+          console.error("❌ Failed to extract image URL");
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Failed to extract image URL from generation result"
+          );
+        }
+        
+        console.log(`📝 Posting tweet with extracted image URL`);
+        if (logger) logger(`Posting tweet with extracted URL: ${imageUrl}`);
+        
+        // Use the existing upload function
+        return await uploadImageAndTweet.executable({
+          text: tweet_text,
+          image_url: imageUrl
+        }, logger || (() => {}));
+        
+      } catch (error: any) {
+        console.error('❌ ERROR in generate_and_tweet:', error);
+        return new ExecutableGameFunctionResponse(
+          ExecutableGameFunctionStatus.Failed,
+          `Failed to generate and tweet: ${error?.message || 'Unknown error'}`
+        );
+      }
+    }
+  });
+
   return new GameWorker({
     id: "twitter_media_worker",
     name: "Twitter Media Worker",
     description: "Worker that handles Twitter media uploads and posting",
-    functions: [uploadImageAndTweet]
+    functions: [uploadImageAndTweet, generateAndTweet]
   });
 }
