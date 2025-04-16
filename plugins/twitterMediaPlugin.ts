@@ -78,6 +78,19 @@ export function createTwitterMediaWorker(
             "Tweet text is required"
           );
         }
+
+        if (text && (
+          text.includes('generate_and_tweet(') || 
+          text.includes('generate_image(') || 
+          text.includes('upload_image_and_tweet(') ||
+          text.includes('get_latest_image_url(')
+        )) {
+          console.log("⚠️ Command-like text detected in tweet:", text);
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Text appears to be a command rather than tweet content. Remove function names and try again."
+          );
+        }
         
         // Validate and fix the image URL
         const finalImageUrl = await validateAndFixImageUrl(image_url);
