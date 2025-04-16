@@ -3,7 +3,7 @@ import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
 import { TwitterApi } from 'twitter-api-v2';
-import { getLastImageUrl, storeImageUrl } from './imageUrlHandler';
+import { getLastImageUrl, storeImageUrl, shortenUrl } from './imageUrlHandler';
 
 declare global {
   var activeAgent: any;
@@ -27,7 +27,7 @@ export function createTwitterMediaWorker(
     fs.mkdirSync(tmpDir, { recursive: true });
   }
 
-  function validateAndFixImageUrl(providedUrl?: string): string | null {
+  async function validateAndFixImageUrl(providedUrl?: string): Promise<string | null> {
     if (!providedUrl || 
         providedUrl.includes("[") || 
         providedUrl.includes("generated.image") ||
@@ -40,14 +40,19 @@ export function createTwitterMediaWorker(
       const storedUrl = getLastImageUrl();
       if (storedUrl) {
         console.log("✅ Using stored image URL instead:", storedUrl);
-        return storedUrl;
+        // Shorten the URL before returning
+        return await shortenUrl(storedUrl);
       } else {
         console.log("❌ No stored URL available");
         return null;
       }
     }
     
-    // URL seems valid
+    // URL seems valid but still shorten it if it's too long
+    if (providedUrl.length > 500) {
+      return await shortenUrl(providedUrl);
+    }
+    
     return providedUrl;
   }
 
@@ -75,7 +80,7 @@ export function createTwitterMediaWorker(
         }
         
         // Validate and fix the image URL
-        const finalImageUrl = validateAndFixImageUrl(image_url);
+        const finalImageUrl = await validateAndFixImageUrl(image_url);
         
         if (!finalImageUrl) {
           return new ExecutableGameFunctionResponse(
@@ -179,11 +184,13 @@ export function createTwitterMediaWorker(
     description: "Generate an image and immediately post a tweet with it in a single step",
     args: [
       { name: "prompt", description: "The image generation prompt" },
-      { name: "tweet_text", description: "The tweet text content" }
+      { name: "tweet_text", description: "The tweet text content" },
+      { name: "width", description: "Width of generated image (optional)", default: 768 },
+      { name: "height", description: "Height of generated image (optional)", default: 768 }
     ],
-    executable: async (args: {prompt?: string, tweet_text?: string}, logger?: ((msg: string) => void) | null) => {
+    executable: async (args: {prompt?: string, tweet_text?: string, width?: number, height?: number}, logger?: ((msg: string) => void) | null) => {
       try {
-        const { prompt, tweet_text } = args;
+        const { prompt, tweet_text, width = 768, height = 768 } = args;
         
         if (!prompt || !tweet_text) {
           return new ExecutableGameFunctionResponse(
@@ -193,7 +200,8 @@ export function createTwitterMediaWorker(
         }
         
         console.log("🔄 Combined generate_and_tweet starting...");
-        if (logger) logger(`Starting combined image generation and tweet posting`);
+        console.log(`Using image dimensions: ${width}x${height}`);
+        if (logger) logger(`Starting combined image generation and tweet posting with dimensions ${width}x${height}`);
         
         // Get all workers from current application context
         let imageGenWorker = null;
@@ -227,11 +235,11 @@ export function createTwitterMediaWorker(
           );
         }
         
-        // Generate the image
-        console.log(`🖼️ Generating image with prompt: "${prompt}"`);
+        // Generate the image with specified dimensions
+        console.log(`🖼️ Generating image with prompt: "${prompt}" and dimensions ${width}x${height}`);
         if (logger) logger(`Generating image with prompt: ${prompt}`);
         
-        const genResult = await generateImageFunction.executable({ prompt }, logger);
+        const genResult = await generateImageFunction.executable({ prompt, width, height }, logger);
         
         console.log("Generation result type:", typeof genResult);
         console.log("Generation result keys:", Object.keys(genResult || {}));
@@ -278,13 +286,15 @@ export function createTwitterMediaWorker(
           );
         }
         
-        console.log(`📝 Posting tweet with extracted image URL`);
-        if (logger) logger(`Posting tweet with extracted URL: ${imageUrl}`);
+        // Shorten the URL before tweeting
+        const shortImageUrl = await shortenUrl(imageUrl);
+        console.log(`📝 Posting tweet with shortened image URL: ${shortImageUrl}`);
+        if (logger) logger(`Posting tweet with shortened URL: ${shortImageUrl}`);
         
         // Use the existing upload function
         return await uploadImageAndTweet.executable({
           text: tweet_text,
-          image_url: imageUrl
+          image_url: shortImageUrl
         }, logger || (() => {}));
         
       } catch (error: any) {

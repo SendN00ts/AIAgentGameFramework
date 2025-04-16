@@ -1,10 +1,21 @@
 import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import { storeImageUrl, getLastImageUrl } from './imageUrlHandler';
 
+// Default image dimensions
+const DEFAULT_WIDTH = 768;
+const DEFAULT_HEIGHT = 768;
+
 // Create a function to wrap the default image generator with URL capturing
 export function createEnhancedImageGenPlugin(config: any) {
+  // Set default dimensions in config if not provided
+  const enhancedConfig = {
+    ...config,
+    defaultWidth: config.defaultWidth || DEFAULT_WIDTH,
+    defaultHeight: config.defaultHeight || DEFAULT_HEIGHT
+  };
+  
   // Create the original plugin
-  const originalPlugin = new ImageGenPlugin(config);
+  const originalPlugin = new ImageGenPlugin(enhancedConfig);
   
   // Get the original worker
   const originalWorker = originalPlugin.getWorker({});
@@ -20,10 +31,17 @@ export function createEnhancedImageGenPlugin(config: any) {
   const originalExecutable = generateImageFunction.executable;
   
   generateImageFunction.executable = async (args: any, logger?: any) => {
-    console.log("🖼️ Running enhanced image generation with prompt:", args.prompt);
+    // Apply default dimensions if not specified
+    const enhancedArgs = {
+      ...args,
+      width: args.width || enhancedConfig.defaultWidth,
+      height: args.height || enhancedConfig.defaultHeight
+    };
     
-    // Call the original function
-    const result = await originalExecutable(args, (msg: string) => {
+    console.log(`🖼️ Running enhanced image generation with prompt: "${enhancedArgs.prompt}" and dimensions ${enhancedArgs.width}x${enhancedArgs.height}`);
+    
+    // Call the original function with enhanced args
+    const result = await originalExecutable(enhancedArgs, (msg: string) => {
       // Pass through to the original logger
       if (logger) logger(msg);
       

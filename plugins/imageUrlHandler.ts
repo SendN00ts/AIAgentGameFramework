@@ -1,4 +1,5 @@
 import { GameWorker, GameFunction, ExecutableGameFunctionResponse, ExecutableGameFunctionStatus } from "@virtuals-protocol/game";
+import axios from 'axios';
 
 // Store the latest generated image URL
 let lastGeneratedImageUrl: string | null = null;
@@ -12,6 +13,19 @@ export function storeImageUrl(url: string): void {
 // Function to get the latest image URL
 export function getLastImageUrl(): string | null {
   return lastGeneratedImageUrl;
+}
+
+// Function to shorten URLs using a service like TinyURL
+export async function shortenUrl(longUrl: string): Promise<string> {
+  try {
+    // Using TinyURL API for simplicity
+    const response = await axios.get(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
+    console.log("🔗 URL shortened successfully");
+    return response.data;
+  } catch (error) {
+    console.error('Error shortening URL:', error);
+    return longUrl; // Return original URL if shortening fails
+  }
 }
 
 // Create a wrapper worker that manages image URLs

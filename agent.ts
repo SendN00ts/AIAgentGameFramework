@@ -23,6 +23,8 @@ const imageGenConfig = {
     id: "wisdom_image_gen",
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
+    defaultWidth: 768,  // Set smaller default dimensions for more reliable URLs
+    defaultHeight: 768, // Set smaller default dimensions for more reliable URLs
     apiClientConfig: {
         apiKey: process.env.TOGETHER_API_KEY || '',
         baseApiUrl: "https://api.together.xyz/v1/images/generations"
@@ -63,10 +65,10 @@ YOUR POSSIBLE ACTIONS:
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
 1. **Important: Always generate images in a fine art Chinese drawn style**.
 2. Use generate_and_tweet with a nature scene prompt and wisdom quote in a single step
-   Example: generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom")
+   Example: generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 768, 768)
 
 ALTERNATIVE POSTING METHOD (if generate_and_tweet fails):
-1. Generate an image using generate_image with a nature scene prompt
+1. Generate an image using generate_image with a nature scene prompt (using width=768, height=768)
 2. Get the image URL using get_latest_image_url
 3. Post using upload_image_and_tweet with the retrieved URL
 
@@ -118,3 +120,8 @@ wisdom_agent.setLogger((agent: any, msg: string) => {
     console.log(msg);
     console.log("------------------------\n");
 });
+
+// Make agent available globally
+if (typeof global !== 'undefined') {
+    (global as any).activeAgent = wisdom_agent;
+}
