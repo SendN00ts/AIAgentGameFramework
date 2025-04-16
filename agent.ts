@@ -63,9 +63,9 @@ YOUR POSSIBLE ACTIONS:
 - REPLY_TO_TARGET: Reply to wellness and philosophy accounts to build connections
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. **Important: Always generate images in a fine art Chinese drawn style**.
-2. Use generate_and_tweet with a nature scene prompt and wisdom quote in a single step
-   Example: generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 768, 768)
+1. **Important: Always generate images in fine art Chinese style**.
+2. DO NOT COPY THIS TEXT LITERALLY - This is an example of the command to use: 
+   generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 768, 768)
 
 ALTERNATIVE POSTING METHOD (if generate_and_tweet fails):
 1. Generate an image using generate_image with a nature scene prompt (using width=768, height=768)

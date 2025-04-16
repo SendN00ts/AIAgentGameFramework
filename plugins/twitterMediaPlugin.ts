@@ -9,6 +9,28 @@ declare global {
   var activeAgent: any;
 }
 
+// Helper function to check if text resembles a command
+function isCommandLike(text: string): boolean {
+  if (!text) return false;
+  
+  // Check for known function names
+  if (
+    text.includes('generate_and_tweet(') || 
+    text.includes('generate_image(') || 
+    text.includes('upload_image_and_tweet(') ||
+    text.includes('post_tweet(') ||
+    text.includes('get_latest_image_url(') ||
+    text.includes('Execute ') ||
+    text.includes('function') ||
+    /^[a-zA-Z_]+\(['"].+['"]\)/.test(text) // Regex to catch function call patterns
+  ) {
+    console.log("⚠️ Command-like text detected:", text);
+    return true;
+  }
+  
+  return false;
+}
+
 export function createTwitterMediaWorker(
   apiKey: string, 
   apiSecret: string, 
@@ -78,14 +100,9 @@ export function createTwitterMediaWorker(
             "Tweet text is required"
           );
         }
-
-        if (text && (
-          text.includes('generate_and_tweet(') || 
-          text.includes('generate_image(') || 
-          text.includes('upload_image_and_tweet(') ||
-          text.includes('get_latest_image_url(')
-        )) {
-          console.log("⚠️ Command-like text detected in tweet:", text);
+        
+        // Check if text resembles a command
+        if (isCommandLike(text)) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "Text appears to be a command rather than tweet content. Remove function names and try again."
@@ -209,6 +226,14 @@ export function createTwitterMediaWorker(
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "Both image prompt and tweet text are required"
+          );
+        }
+        
+        // Check if tweet text resembles a command
+        if (isCommandLike(tweet_text)) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Tweet text appears to be a command rather than content. Remove function names and try again."
           );
         }
         
