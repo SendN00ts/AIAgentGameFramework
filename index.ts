@@ -20,8 +20,8 @@ let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
 // Config for timing
-const POST_INTERVAL = 1 * 60 * 1000; // 1 minute for posts
-const OTHER_ACTION_INTERVAL = 1 * 60 * 1000; // 1 minute for other actions
+const POST_INTERVAL = 15 * 60 * 1000; // 1 minute for posts
+const OTHER_ACTION_INTERVAL = 10 * 60 * 1000; // 1 minute for other actions
 
 // Track current action in rotation
 let currentActionIndex = 0;
