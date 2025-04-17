@@ -2,8 +2,8 @@ import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import { storeImageUrl, getLastImageUrl } from './imageUrlHandler';
 
 // Default image dimensions
-const DEFAULT_WIDTH = 768;
-const DEFAULT_HEIGHT = 768;
+const DEFAULT_WIDTH = 1440;
+const DEFAULT_HEIGHT = 1440;
 
 // Create a function to wrap the default image generator with URL capturing
 export function createEnhancedImageGenPlugin(config: any) {

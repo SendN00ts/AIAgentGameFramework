@@ -23,8 +23,8 @@ const imageGenConfig = {
     id: "wisdom_image_gen",
     name: "Wisdom Image Generator",
     description: "Generates images to accompany wisdom tweets",
-    defaultWidth: 768,  // Set smaller default dimensions for more reliable URLs
-    defaultHeight: 768, // Set smaller default dimensions for more reliable URLs
+    defaultWidth: 1440,  // Set smaller default dimensions for more reliable URLs
+    defaultHeight: 1440, // Set smaller default dimensions for more reliable URLs
     apiClientConfig: {
         apiKey: process.env.TOGETHER_API_KEY || '',
         baseApiUrl: "https://api.together.xyz/v1/images/generations"
@@ -65,10 +65,10 @@ YOUR POSSIBLE ACTIONS:
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
 1. **Important: Always generate images in fine art Chinese style**.
 2. DO NOT COPY THIS TEXT LITERALLY - This is an example of the command to use: 
-   generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 768, 768)
+   generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 1440, 1440)
 
 ALTERNATIVE POSTING METHOD (if generate_and_tweet fails):
-1. Generate an image using generate_image with a nature scene prompt (using width=768, height=768)
+1. Generate an image using generate_image with a nature scene prompt (using width=1440, height=1440)
 2. Get the image URL using get_latest_image_url
 3. Post using upload_image_and_tweet with the retrieved URL
 

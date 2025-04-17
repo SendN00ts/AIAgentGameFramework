@@ -31,6 +31,10 @@ function isCommandLike(text: string): boolean {
   return false;
 }
 
+function containsHashtags(text: string): boolean {
+  return text.includes('#');
+}
+
 export function createTwitterMediaWorker(
   apiKey: string, 
   apiSecret: string, 
@@ -116,6 +120,13 @@ export function createTwitterMediaWorker(
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "No valid image URL provided and no stored URL available. Generate an image first."
+          );
+        }
+
+        if (containsHashtags(text)) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Please remove hashtags from your tweet content as per guidelines."
           );
         }
     
@@ -234,6 +245,13 @@ export function createTwitterMediaWorker(
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "Tweet text appears to be a command rather than content. Remove function names and try again."
+          );
+        }
+
+        if (containsHashtags(tweet_text)) {
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            "Please remove hashtags from your tweet content as per guidelines."
           );
         }
         
