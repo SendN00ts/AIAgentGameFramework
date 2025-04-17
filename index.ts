@@ -1,5 +1,6 @@
 import { wisdom_agent } from './agent';
 import * as http from 'http';
+import { replyManager } from './plugins/replyManager';
 
 // Define actions as an enum to ensure type safety
 enum ACTIONS {
@@ -12,17 +13,17 @@ enum ACTIONS {
   QUOTE = 'quote'
 }
 
-// Tracking variables - set lastPostTime to 0 to force an immediate post
+// Tracking variables
 let lastPostTime = 0;
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
-// Config for timing - changed to 1 minute for both intervals
-const POST_INTERVAL = 5 * 60 * 1000; // 1 minute for posts
-const OTHER_ACTION_INTERVAL = 5 * 60 * 1000; // 1 minute for other actions
+// Config for timing
+const POST_INTERVAL = 1 * 60 * 1000; // 1 minute for posts
+const OTHER_ACTION_INTERVAL = 1 * 60 * 1000; // 1 minute for other actions
 
-// Track current action in rotation (excluding POST which has its own schedule)
+// Track current action in rotation
 let currentActionIndex = 0;
 const nonPostActions = [
   ACTIONS.REPLY, 
@@ -104,6 +105,7 @@ IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
 3. Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
 4. Be authentic, supportive and natural in your reply
 5. Keep replies concise (1-3 sentences)
+6. IMPORTANT: DO NOT USE HASHTAGS IN YOUR REPLIES
 `;
   }
   
@@ -112,6 +114,8 @@ IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
 
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
 You operate on a 1-minute schedule. Make your single action count.
+
+IMPORTANT RULE: NO HASHTAGS ALLOWED IN ANY TWEETS OR REPLIES.
 
 YOUR POSSIBLE ACTIONS:
 - POST: Share original wisdom content with images
@@ -128,8 +132,9 @@ ${additionalInstructions}
 All other actions are forbidden in this cycle.
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. **Important: Always generate images in a fine art Chinese drawn style**.
-2. EXAMPLE COMMAND (do not tweet this text): generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 768, 768)
+1. First, use generate_image with a prompt for a nature scene or abstract pattern (with width=768, height=768)
+2. After generating the image, use get_latest_image_url to retrieve the correct image URL
+3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
 YOUR CONTENT GUIDELINES:
 - Post thoughtful content about philosophy, mindfulness, and life wisdom
@@ -137,6 +142,7 @@ YOUR CONTENT GUIDELINES:
 - Offer practical advice for leading a more meaningful life
 - Create content that inspires reflection and personal growth
 - Balance profound insights with accessible language
+- DO NOT USE HASHTAGS IN ANY TWEETS
 
 ENGAGEMENT STRATEGIES:
 - For threads: Make an initial tweet, then reply with the ID from the response
@@ -207,6 +213,13 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           success = true;
           break;
           
+        case ACTIONS.REPLY_TARGETS:
+          // Handle reply to target accounts through our custom reply manager
+          console.log("Executing REPLY_TARGETS action through reply manager...");
+          await replyManager.startMonitoring('random', 15); // 0 means run once immediately
+          success = true;
+          break;
+          
         default:
           // Handle all other actions
           console.log(`Executing ${nextAction} action...`);
@@ -247,6 +260,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       console.log("Post completed. Next post in 1 minute.");
     }
     
+    // Schedule next action
     console.log(`Scheduling next action in ${OTHER_ACTION_INTERVAL/1000} seconds`);
     setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
     
@@ -310,6 +324,11 @@ async function main(): Promise<void> {
       console.log("Initializing agent...");
       await wisdom_agent.init();
       console.log("Agent initialization successful!");
+      
+      // Initialize reply manager
+      console.log("Initializing reply manager...");
+      await replyManager.initialize();
+      console.log("Reply manager initialization successful!");
       
       // Log available functions
       console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>

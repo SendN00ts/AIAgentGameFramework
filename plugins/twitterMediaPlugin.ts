@@ -31,8 +31,8 @@ function isCommandLike(text: string): boolean {
   return false;
 }
 
-function containsHashtags(text: string): boolean {
-  return text.includes('#');
+function containsHashtags(text?: string): boolean {
+  return Boolean(text && text.includes('#'));
 }
 
 export function createTwitterMediaWorker(
