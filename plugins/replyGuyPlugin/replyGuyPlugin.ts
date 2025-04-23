@@ -26,11 +26,27 @@ export function createReplyGuyWorker(
     accessSecret: accessSecret,
   });
 
+  // Function to load and parse the target accounts with multiple path checks
   function loadTargetAccounts(): TargetCategories {
     try {
-      const filePath = path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json');
-      const fileContent = fs.readFileSync(filePath, 'utf8');
-      return JSON.parse(fileContent);
+      // Try multiple possible locations
+      const possiblePaths = [
+        path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json'),
+        path.resolve(process.cwd(), 'plugins/target_accounts.json'),
+        path.resolve(process.cwd(), 'target_accounts.json'),
+        path.resolve(__dirname, 'target_accounts.json')
+      ];
+      
+      for (const filePath of possiblePaths) {
+        if (fs.existsSync(filePath)) {
+          console.log(`Found target accounts at: ${filePath}`);
+          const fileContent = fs.readFileSync(filePath, 'utf8');
+          return JSON.parse(fileContent);
+        }
+      }
+      
+      console.error('Could not find target_accounts.json in any expected location');
+      return {};
     } catch (error) {
       console.error('Error loading target accounts:', error);
       return {};
@@ -116,6 +132,46 @@ export function createReplyGuyWorker(
           // Get the latest tweet
           const latestTweet = tweetsResponse.data.data[0];
           
+          // Check if tweet has a valid creation date
+          if (!latestTweet.created_at) {
+            console.log(`No valid date for tweet from ${username}`);
+            return new ExecutableGameFunctionResponse(
+              ExecutableGameFunctionStatus.Done,
+              JSON.stringify({
+                handle: randomAccount.handle,
+                username: username,
+                description: randomAccount.description,
+                category: targetCategory,
+                tweet_id: latestTweet.id,
+                tweet_text: latestTweet.text,
+                tweet_created_at: "unknown"
+              })
+            );
+          }
+          
+          // Parse the date safely
+          let tweetDate: Date;
+          try {
+            tweetDate = new Date(latestTweet.created_at);
+            if (isNaN(tweetDate.getTime())) throw new Error("Invalid date");
+          } catch (e) {
+            console.log(`Invalid date format for tweet from ${username}`);
+            // Use current date to avoid skipping
+            tweetDate = new Date();
+          }
+          
+          // Check if tweet is too old (older than 3 months)
+          const threeMonthsAgo = new Date();
+          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+          
+          if (tweetDate < threeMonthsAgo) {
+            console.log(`Skipping inactive account ${username} - last tweet from ${tweetDate.toISOString()}`);
+            return new ExecutableGameFunctionResponse(
+              ExecutableGameFunctionStatus.Failed,
+              `Account ${username} hasn't tweeted recently (last tweet: ${tweetDate.toDateString()})`
+            );
+          }
+          
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Done,
             JSON.stringify({
@@ -180,7 +236,7 @@ export function createReplyGuyWorker(
           );
         }
 
-        // Check if reply text resembles a command
+        // Check if reply text resembles a command or is too short/generic
         if (reply_text && (
           reply_text.includes('generate_and_tweet(') || 
           reply_text.includes('generate_image(') || 
@@ -189,13 +245,16 @@ export function createReplyGuyWorker(
           reply_text.includes('reply_tweet(') ||
           reply_text.includes('get_latest_image_url(') ||
           reply_text.includes('Execute ') ||
-          reply_text.includes('function') ||
-          /^[a-zA-Z_]+\(['"].+['"]\)/.test(reply_text) // Regex to catch function call patterns
+          reply_text === "go_to" ||
+          reply_text === "wait" ||
+          reply_text.length < 10 ||
+          /^[a-z_]+$/.test(reply_text) || // Single word commands
+          /^[a-zA-Z_]+\(['"].+['"]\)/.test(reply_text) // Function call patterns
         )) {
-          console.log("⚠️ Command-like text detected in reply:", reply_text);
+          console.log("⚠️ Invalid reply content detected:", reply_text);
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "Reply text appears to be a command rather than a genuine reply. Remove function names and try again."
+            "Reply text appears to be a command or is too short. Please provide a thoughtful, conversational reply."
           );
         }
         

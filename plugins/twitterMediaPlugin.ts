@@ -74,7 +74,7 @@ export function createTwitterMediaWorker(
       }
     }
     
-    // URL seems valid but still shorten it if it's too long
+    // URL seems valid but still shorten it if it's too long    
     if (providedUrl.length > 500) {
       return await shortenUrl(providedUrl);
     }

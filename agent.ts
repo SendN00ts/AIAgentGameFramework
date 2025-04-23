@@ -63,9 +63,9 @@ YOUR POSSIBLE ACTIONS:
 - REPLY_TO_TARGET: Reply to wellness and philosophy accounts to build connections
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. **Important: Always generate images in fine art Chinese style**.
+1. **Important: Always generate images in digital watercolor with painterly textures style **.
 2. DO NOT COPY THIS TEXT LITERALLY - This is an example of the command to use: 
-   generate_and_tweet("serene mountain at dawn in fine art Chinese style", "The journey of a thousand miles begins with a single step. #Wisdom", 1440, 1440)
+   generate_and_tweet("serene mountain at dawn in digital watercolor with painterly textures style", "The journey of a thousand miles begins with a single step. #Wisdom", 1440, 1440)
 
 ALTERNATIVE POSTING METHOD (if generate_and_tweet fails):
 1. Generate an image using generate_image with a nature scene prompt (using width=1440, height=1440)
@@ -81,7 +81,6 @@ CRITICAL PROCESS FOR REPLY_TO_TARGET ACTION:
 - Mention topics relevant to the account's description and tweet content
 - Be authentic, supportive, and natural in your reply
 - Keep replies concise (1-3 sentences)
-
 
 IMPORTANT RULE: NO HASHTAGS ALLOWED IN ANY TWEETS OR REPLIES.
 

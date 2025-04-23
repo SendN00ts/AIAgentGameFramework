@@ -58,7 +58,6 @@ function ensureDirExists(dir: string) {
   }
 }
 
-// Find a target account and reply to their latest tweet
 async function findAndReply(category: string = 'random') {
   console.log(`⏱️ Running scheduled reply check for category: ${category}`);
   
@@ -72,21 +71,17 @@ async function findAndReply(category: string = 'random') {
       console.error('Failed to find target account:', findResult?.feedback || 'Unknown error');
       return;
     }
-    
-    // Parse the target account info
+
     const accountInfo = JSON.parse(findResult.feedback);
     console.log(`Found account: ${accountInfo.handle} with tweet: ${accountInfo.tweet_id}`);
     
-    // Check if we've already replied to this tweet
     if (repliedTweets[accountInfo.tweet_id]) {
       console.log(`Already replied to tweet ${accountInfo.tweet_id}, skipping`);
       return;
     }
     
-    // Update agent with context about who we're replying to
     const replyPurpose = `Reply to ${accountInfo.handle}, who focuses on ${accountInfo.description}. Their tweet says: "${accountInfo.tweet_text}"`;
     
-    // Temporary description update for the agent
     const originalDescription = wisdom_agent.description;
     
     wisdom_agent.description = `You are a wisdom-sharing Twitter bot that engages thoughtfully with wellness and philosophy content.
@@ -129,8 +124,13 @@ Your reply should be thoughtful, specific to their content, and invite further e
         console.error('Unexpected agent response format');
         return;
       }
+
+      if (replyContent === "go_to" || replyContent === "wait" || replyContent.length < 10) {
+        console.log("Invalid reply content detected, generating fallback response");
+        const accountType = accountInfo.category || "wellness";
+        replyContent = `Your insights on ${accountInfo.tweet_text.substring(0, 30)}... align with mindfulness principles. The connection between thought and action creates meaningful growth.`;
+      }
       
-      // Post the reply
       const replyResult = await replyGuyWorker.functions
         .find(f => f.name === 'reply_tweet')
         ?.executable({ 
