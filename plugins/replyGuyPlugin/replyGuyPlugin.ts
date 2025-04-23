@@ -26,10 +26,9 @@ export function createReplyGuyWorker(
     accessSecret: accessSecret,
   });
 
-  // Function to load and parse the target accounts
   function loadTargetAccounts(): TargetCategories {
     try {
-      const filePath = path.resolve(process.cwd(), 'plugins/target_accounts.json');
+      const filePath = path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json');
       const fileContent = fs.readFileSync(filePath, 'utf8');
       return JSON.parse(fileContent);
     } catch (error) {

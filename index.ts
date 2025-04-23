@@ -1,6 +1,6 @@
 import { wisdom_agent } from './agent';
 import * as http from 'http';
-import { replyManager } from './plugins/replyManager';
+import { replyManager } from './plugins/replyGuyPlugin/replyManager';
 
 // Define actions as an enum to ensure type safety
 enum ACTIONS {

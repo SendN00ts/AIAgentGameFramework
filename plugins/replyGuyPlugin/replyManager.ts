@@ -1,4 +1,4 @@
-import { wisdom_agent } from '../agent';
+import { wisdom_agent } from '../../agent';
 import { createReplyGuyWorker } from './replyGuyPlugin';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
