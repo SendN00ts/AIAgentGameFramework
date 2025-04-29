@@ -13,15 +13,23 @@ enum ACTIONS {
   QUOTE = 'quote'
 }
 
+// Constant for image post probability (45%)
+const IMAGE_POST_PROBABILITY = 0.45;
+
 // Tracking variables
 let lastPostTime = 0;
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 3;
 
+// Stats tracking for image vs text posts
+let totalPosts = 0;
+let imagePosts = 0;
+let textPosts = 0;
+
 // Config for timing
-const POST_INTERVAL = 15 * 60 * 1000; // 1 minute for posts
-const OTHER_ACTION_INTERVAL = 10 * 60 * 1000; // 1 minute for other actions
+const POST_INTERVAL = 15 * 60 * 1000; 
+const OTHER_ACTION_INTERVAL = 10 * 60 * 1000; 
 
 // Track current action in rotation
 let currentActionIndex = 0;
@@ -44,13 +52,23 @@ function getNextAction(): ACTIONS {
   // If it's been more than POST_INTERVAL since last post, do a post
   if (timeSinceLastPost >= POST_INTERVAL) {
     console.log("Time for a new post!");
+    
     // If we've exceeded max retries for image posts, fall back to text-only
     if (imageRetryCount >= MAX_IMAGE_RETRIES) {
       console.log(`⚠️ Max image retries (${MAX_IMAGE_RETRIES}) reached. Posting without image.`);
       imageRetryCount = 0; // Reset for next time
       return ACTIONS.POST_NO_IMAGE;
     }
-    return ACTIONS.POST;
+    
+    // Randomly decide whether to post with an image (45% chance) or without (55% chance)
+    const randomValue = Math.random();
+    if (randomValue <= IMAGE_POST_PROBABILITY) {
+      console.log(`Randomly selected to post WITH image (probability: ${IMAGE_POST_PROBABILITY * 100}%)`);
+      return ACTIONS.POST;
+    } else {
+      console.log(`Randomly selected to post WITHOUT image (probability: ${(1 - IMAGE_POST_PROBABILITY) * 100}%)`);
+      return ACTIONS.POST_NO_IMAGE;
+    }
   }
   
   // Otherwise, pick the next action in rotation
@@ -135,6 +153,8 @@ CRITICAL PROCESS FOR POSTING WITH IMAGES:
 1. First, use generate_image with a prompt for a nature scene or abstract pattern (with width=768, height=768)
 2. After generating the image, use get_latest_image_url to retrieve the correct image URL
 3. Use that EXACT URL with upload_image_and_tweet for your tweet
+
+NOTE: The system will randomly decide whether to post with images (45% of posts) or without (55% of posts)
 
 YOUR CONTENT GUIDELINES:
 - Post thoughtful content about philosophy, mindfulness, and life wisdom
@@ -254,10 +274,20 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       }
     }
     
-    // If this was a successful post, update last post time
+    // If this was a successful post, update last post time and stats
     if ((nextAction === ACTIONS.POST || nextAction === ACTIONS.POST_NO_IMAGE) && success) {
       lastPostTime = Date.now();
-      console.log("Post completed. Next post in 1 minute.");
+      totalPosts++;
+      
+      if (nextAction === ACTIONS.POST) {
+        imagePosts++;
+      } else if (nextAction === ACTIONS.POST_NO_IMAGE) {
+        textPosts++;
+      }
+      
+      const imagePostPercentage = (imagePosts / totalPosts) * 100;
+      console.log(`Post completed. Next post in ${POST_INTERVAL/60000} minutes.`);
+      console.log(`Stats: ${totalPosts} total posts (${imagePosts} with images [${imagePostPercentage.toFixed(1)}%], ${textPosts} text-only [${(100-imagePostPercentage).toFixed(1)}%])`);
     }
     
     // Schedule next action
@@ -314,6 +344,8 @@ async function main(): Promise<void> {
     console.log("API_KEY present:", !!process.env.API_KEY);
     console.log("TWITTER_API_KEY present:", !!process.env.TWITTER_API_KEY);
     console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
+    console.log(`IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}% (${IMAGE_POST_PROBABILITY * 100}% of posts will include images)`);
+    console.log(`TEXT_POST_PROBABILITY: ${(1 - IMAGE_POST_PROBABILITY) * 100}% (${(1 - IMAGE_POST_PROBABILITY) * 100}% of posts will be text-only)`);
     
     // Sanitize description
     const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
@@ -349,7 +381,13 @@ async function main(): Promise<void> {
     
     // Force an immediate first post to test that everything works
     console.log("Forcing immediate first post...");
-    updateAgentForAction(ACTIONS.POST);
+    
+    // Randomly decide whether to force a post with image or without based on our 45% probability
+    const forceWithImage = Math.random() <= IMAGE_POST_PROBABILITY;
+    const initialAction = forceWithImage ? ACTIONS.POST : ACTIONS.POST_NO_IMAGE;
+    
+    console.log(`Forcing initial ${initialAction} action (${forceWithImage ? 'with' : 'without'} image)...`);
+    updateAgentForAction(initialAction);
     wisdom_agent.step({ verbose: true })
       .then(() => console.log("Force post successful"))
       .catch(err => console.error("Force post failed:", err));

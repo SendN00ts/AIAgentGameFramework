@@ -2,7 +2,7 @@ import { GameAgent, LLMModel } from "@virtuals-protocol/game";
 import { twitterPlugin } from "./plugins/twitterPlugin/twitterPlugin";
 import ImageGenPlugin from "@virtuals-protocol/game-imagegen-plugin";
 import { createTwitterMediaWorker } from './plugins/twitterMediaPlugin';
-import { createEnhancedImageGenPlugin } from './plugins/modified-image-gen-plugin';
+import { createEnhancedImageGenPlugin } from './plugins/modifiedImageGenPlugin';
 import { createImageUrlHandlerWorker } from './plugins/imageUrlHandler';
 import dotenv from "dotenv";
 dotenv.config();
