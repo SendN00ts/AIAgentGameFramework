@@ -14,7 +14,7 @@ enum ACTIONS {
 }
 
 // Constant for image post probability (45%)
-const IMAGE_POST_PROBABILITY = 0.45;
+const IMAGE_POST_PROBABILITY = 0.7;
 
 // Tracking variables
 let lastPostTime = 0;
