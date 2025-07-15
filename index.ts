@@ -27,9 +27,13 @@ let totalPosts = 0;
 let imagePosts = 0;
 let textPosts = 0;
 
-// Config for timing
-const POST_INTERVAL = 15 * 60 * 1000; 
-const OTHER_ACTION_INTERVAL = 10 * 60 * 1000; 
+// Config for timing - increased intervals to avoid rate limits
+const POST_INTERVAL = 20 * 60 * 1000;  // Increased from 15 to 20 minutes
+const OTHER_ACTION_INTERVAL = 15 * 60 * 1000;  // Increased from 10 to 15 minutes
+
+// Rate limit handling
+let isRateLimited = false;
+let rateLimitResetTime = 0; 
 
 // Track current action in rotation
 let currentActionIndex = 0;
@@ -45,6 +49,13 @@ const nonPostActions = [
 function getNextAction(): ACTIONS {
   const now = Date.now();
   const timeSinceLastPost = now - lastPostTime;
+  
+  // Check if we're still rate limited
+  if (isRateLimited && now < rateLimitResetTime) {
+    console.log(`Still rate limited. Reset in ${Math.round((rateLimitResetTime - now) / 1000)} seconds`);
+    // During rate limit, only do non-API actions or wait
+    return ACTIONS.SEARCH; // This typically uses less API calls
+  }
   
   console.log("Time since last post:", Math.round(timeSinceLastPost/1000), "seconds");
   console.log("POST_INTERVAL:", Math.round(POST_INTERVAL/1000), "seconds");
@@ -162,15 +173,18 @@ CONTENT STYLE REQUIREMENTS:
   * "The mystic tapestry of existence weaves through..."
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, use generate_image with a simple nature scene prompt (width=768, height=768)
+1. First, use generate_image with a nature scene prompt using this EXACT style: "peaceful mountain lake at sunrise in Architectural illustration in highly abstract watercolor style with minimal linework. Painterly concept art with transparent color washes and deliberately ambiguous edges. Earth-toned palette against white space. Impressionistic, barely suggested forms with flowing brushstrokes" (width=768, height=768)
 2. After generating the image, use get_latest_image_url to retrieve the correct image URL
 3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
 IMAGE GENERATION GUIDELINES:
-- Use simple, clean prompts for nature scenes (mountain, forest, ocean, sunset)
-- Avoid complex artistic styles or abstract descriptions
-- Keep prompts under 15 words
-- Example good prompts: "peaceful mountain lake at sunrise", "serene forest path", "calm ocean waves"
+- ALWAYS use the watercolor architectural illustration style specified above
+- Combine simple nature scenes with the artistic style
+- Keep base scene descriptions short: "mountain lake", "forest path", "ocean waves", "sunset sky"
+- Always append the full watercolor style description
+- Example full prompts: 
+  * "serene forest path in Architectural illustration in highly abstract watercolor style with minimal linework. Painterly concept art with transparent color washes and deliberately ambiguous edges. Earth-toned palette against white space. Impressionistic, barely suggested forms with flowing brushstrokes"
+  * "calm ocean waves in Architectural illustration in highly abstract watercolor style with minimal linework. Painterly concept art with transparent color washes and deliberately ambiguous edges. Earth-toned palette against white space. Impressionistic, barely suggested forms with flowing brushstrokes"
 
 YOUR CONTENT GUIDELINES:
 - Post practical wisdom about personal development, productivity, and mindset
@@ -266,6 +280,21 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       const actionError = error as Error;
       console.error(`Action error (${nextAction}):`, actionError.message);
       
+      // Handle rate limiting errors
+      if (actionError.message.includes('429') || actionError.message.includes('rate limit')) {
+        console.log("⚠️ Rate limit detected. Backing off...");
+        isRateLimited = true;
+        rateLimitResetTime = Date.now() + (15 * 60 * 1000); // Wait 15 minutes
+        
+        // Schedule retry after rate limit period
+        setTimeout(() => {
+          isRateLimited = false;
+          console.log("✅ Rate limit period ended, resuming normal operation");
+        }, 15 * 60 * 1000);
+        
+        return; // Skip this cycle
+      }
+      
       // Special handling for image URL errors
       if (nextAction === ACTIONS.POST && 
           typeof actionError.message === 'string' && 
@@ -306,9 +335,10 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       console.log(`Stats: ${totalPosts} total posts (${imagePosts} with images, ${textPosts} text-only)`);
     }
     
-    // Schedule next action
-    console.log(`Scheduling next action in ${OTHER_ACTION_INTERVAL/1000} seconds`);
-    setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
+    // Schedule next action with longer delay if rate limited
+    const nextInterval = isRateLimited ? (30 * 60 * 1000) : OTHER_ACTION_INTERVAL; // 30 min if rate limited
+    console.log(`Scheduling next action in ${nextInterval/1000} seconds`);
+    setTimeout(() => runAgentWithSchedule(0), nextInterval);
     
   } catch (error) {
     // Error handling with exponential backoff
