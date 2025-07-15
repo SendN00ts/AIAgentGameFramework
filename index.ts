@@ -13,14 +13,14 @@ enum ACTIONS {
   QUOTE = 'quote'
 }
 
-// Constant for image post probability (45%)
+// Constant for image post probability (35%)
 const IMAGE_POST_PROBABILITY = 0.35;
 
 // Tracking variables
 let lastPostTime = 0;
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
-const MAX_IMAGE_RETRIES = 3;
+const MAX_IMAGE_RETRIES = 2;
 
 // Stats tracking for image vs text posts
 let totalPosts = 0;
@@ -53,20 +53,20 @@ function getNextAction(): ACTIONS {
   if (timeSinceLastPost >= POST_INTERVAL) {
     console.log("Time for a new post!");
     
-    // If we've exceeded max retries for image posts, fall back to text-only
-    if (imageRetryCount >= MAX_IMAGE_RETRIES) {
-      console.log(`⚠️ Max image retries (${MAX_IMAGE_RETRIES}) reached. Posting without image.`);
-      imageRetryCount = 0; // Reset for next time
-      return ACTIONS.POST_NO_IMAGE;
-    }
-    
-    // Randomly decide whether to post with an image (45% chance) or without (55% chance)
+    // Randomly decide first, then check retry constraints
     const randomValue = Math.random();
-    if (randomValue <= IMAGE_POST_PROBABILITY) {
+    const shouldTryImage = randomValue <= IMAGE_POST_PROBABILITY;
+    
+    if (shouldTryImage && imageRetryCount < MAX_IMAGE_RETRIES) {
       console.log(`Randomly selected to post WITH image (probability: ${IMAGE_POST_PROBABILITY * 100}%)`);
       return ACTIONS.POST;
     } else {
-      console.log(`Randomly selected to post WITHOUT image (probability: ${(1 - IMAGE_POST_PROBABILITY) * 100}%)`);
+      if (shouldTryImage && imageRetryCount >= MAX_IMAGE_RETRIES) {
+        console.log(`⚠️ Would post with image but max retries reached. Posting text-only.`);
+        imageRetryCount = 0; // Reset for next cycle
+      } else {
+        console.log(`Randomly selected to post WITHOUT image (probability: ${(1 - IMAGE_POST_PROBABILITY) * 100}%)`);
+      }
       return ACTIONS.POST_NO_IMAGE;
     }
   }
@@ -79,9 +79,6 @@ function getNextAction(): ACTIONS {
 
 // Function to update agent description with proper typing
 function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): void {
-  // Extract original description sections
-  const baseDescription = wisdom_agent.description.split("CRITICAL INSTRUCTION:")[0];
-  
   // Create new focused description with proper typing
   const actionDescriptions: Record<ACTIONS, string> = {
     [ACTIONS.POST]: "POST original wisdom content with images",
@@ -128,7 +125,7 @@ IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
   }
   
   // Update agent's description
-  wisdom_agent.description = `You are a wisdom-sharing Twitter bot that posts insightful content with relevant images.
+  wisdom_agent.description = `You are a practical wisdom-sharing Twitter bot that posts clear, actionable insights.
 
 CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
 You operate on a 1-minute schedule. Make your single action count.
@@ -149,26 +146,45 @@ You MUST perform ONLY this action: ${actionDescriptions[action]}
 ${additionalInstructions}
 All other actions are forbidden in this cycle.
 
+CONTENT STYLE REQUIREMENTS:
+- BE DIRECT AND PRACTICAL - avoid overly poetic or metaphorical language
+- Focus on actionable advice and clear insights
+- Use simple, straightforward language that anyone can understand
+- Avoid vague mystical references or abstract concepts
+- Examples of GOOD content:
+  * "Focus on progress, not perfection. Small daily improvements compound over time."
+  * "The best time to start was yesterday. The second best time is now."
+  * "Your thoughts create your reality. Choose them wisely."
+  * "Success isn't about never failing. It's about learning from every failure."
+- Examples of BAD content (too poetic/vague):
+  * "Silent beneath the surface, truths intertwine through the endless giving..."
+  * "Whispers of ancient wisdom dance through the ethereal realm..."
+  * "The mystic tapestry of existence weaves through..."
+
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, use generate_image with a prompt for a nature scene or abstract pattern (with width=768, height=768)
+1. First, use generate_image with a simple nature scene prompt (width=768, height=768)
 2. After generating the image, use get_latest_image_url to retrieve the correct image URL
 3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
-NOTE: The system will randomly decide whether to post with images (45% of posts) or without (55% of posts)
+IMAGE GENERATION GUIDELINES:
+- Use simple, clean prompts for nature scenes (mountain, forest, ocean, sunset)
+- Avoid complex artistic styles or abstract descriptions
+- Keep prompts under 15 words
+- Example good prompts: "peaceful mountain lake at sunrise", "serene forest path", "calm ocean waves"
 
 YOUR CONTENT GUIDELINES:
-- Post thoughtful content about philosophy, mindfulness, and life wisdom
-- Share timeless quotes from great thinkers
-- Offer practical advice for leading a more meaningful life
-- Create content that inspires reflection and personal growth
-- Balance profound insights with accessible language
-- DO NOT USE HASHTAGS IN ANY TWEETS
+- Post practical wisdom about personal development, productivity, and mindset
+- Share clear, actionable quotes from successful people
+- Offer specific advice for improving daily life
+- Create content that provides immediate value
+- Use straightforward language without unnecessary complexity
+- Focus on themes like: goal achievement, habit building, mindset shifts, productivity tips, life lessons
 
 ENGAGEMENT STRATEGIES:
 - For threads: Make an initial tweet, then reply with the ID from the response
 - For engagement: Reply to mentions with additional insights
 - For discovery: Search for trending topics
-- Use emojis to make your posts more lively
+- Use emojis sparingly and only when they add value
 
 REMEMBER: ONE ACTION PER STEP ONLY. Do not attempt multiple actions in a single step.`;
 }
@@ -286,8 +302,8 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       }
       
       const imagePostPercentage = (imagePosts / totalPosts) * 100;
-      console.log(`Post completed. Next post in ${POST_INTERVAL/60000} minutes.`);
-      console.log(`Stats: ${totalPosts} total posts (${imagePosts} with images [${imagePostPercentage.toFixed(1)}%], ${textPosts} text-only [${(100-imagePostPercentage).toFixed(1)}%])`);
+      console.log(`Post completed. Target: ${IMAGE_POST_PROBABILITY * 100}% images, Actual: ${imagePostPercentage.toFixed(1)}%`);
+      console.log(`Stats: ${totalPosts} total posts (${imagePosts} with images, ${textPosts} text-only)`);
     }
     
     // Schedule next action
@@ -382,7 +398,7 @@ async function main(): Promise<void> {
     // Force an immediate first post to test that everything works
     console.log("Forcing immediate first post...");
     
-    // Randomly decide whether to force a post with image or without based on our 45% probability
+    // Randomly decide whether to force a post with image or without based on our 35% probability
     const forceWithImage = Math.random() <= IMAGE_POST_PROBABILITY;
     const initialAction = forceWithImage ? ACTIONS.POST : ACTIONS.POST_NO_IMAGE;
     
