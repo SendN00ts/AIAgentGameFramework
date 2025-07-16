@@ -1,6 +1,7 @@
 import { wisdom_agent } from './agent';
 import * as http from 'http';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
+import { RateLimitHandler } from './plugins/rateLimitHandler';
 
 // Define actions as an enum to ensure type safety
 enum ACTIONS {
@@ -27,35 +28,27 @@ let totalPosts = 0;
 let imagePosts = 0;
 let textPosts = 0;
 
-// Config for timing - increased intervals to avoid rate limits
-const POST_INTERVAL = 20 * 60 * 1000;  // Increased from 15 to 20 minutes
-const OTHER_ACTION_INTERVAL = 15 * 60 * 1000;  // Increased from 10 to 15 minutes
-
-// Rate limit handling
-let isRateLimited = false;
-let rateLimitResetTime = 0; 
+// Config for timing
+const POST_INTERVAL = 15 * 60 * 1000; 
+const OTHER_ACTION_INTERVAL = 10 * 60 * 1000; 
 
 // Track current action in rotation
 let currentActionIndex = 0;
-const nonPostActions = [
-  ACTIONS.REPLY, 
-  ACTIONS.REPLY_TARGETS,
-  ACTIONS.SEARCH, 
-  ACTIONS.LIKE, 
-  ACTIONS.QUOTE
-];
+const READ_ACTIONS = [ACTIONS.REPLY, ACTIONS.REPLY_TARGETS, ACTIONS.SEARCH, ACTIONS.LIKE, ACTIONS.QUOTE];
+const WRITE_ACTIONS = [ACTIONS.POST, ACTIONS.POST_NO_IMAGE];
 
-// Function to get next action based on timing
+// Get rate limit handler instance
+const rateLimitHandler = RateLimitHandler.getInstance();
+
+// Function to check if action requires reading from Twitter
+function isReadAction(action: ACTIONS): boolean {
+  return READ_ACTIONS.includes(action);
+}
+
+// Function to get next action based on timing and rate limits
 function getNextAction(): ACTIONS {
   const now = Date.now();
   const timeSinceLastPost = now - lastPostTime;
-  
-  // Check if we're still rate limited
-  if (isRateLimited && now < rateLimitResetTime) {
-    console.log(`Still rate limited. Reset in ${Math.round((rateLimitResetTime - now) / 1000)} seconds`);
-    // During rate limit, only do non-API actions or wait
-    return ACTIONS.SEARCH; // This typically uses less API calls
-  }
   
   console.log("Time since last post:", Math.round(timeSinceLastPost/1000), "seconds");
   console.log("POST_INTERVAL:", Math.round(POST_INTERVAL/1000), "seconds");
@@ -82,9 +75,36 @@ function getNextAction(): ACTIONS {
     }
   }
   
-  // Otherwise, pick the next action in rotation
-  const action = nonPostActions[currentActionIndex];
-  currentActionIndex = (currentActionIndex + 1) % nonPostActions.length;
+  // For non-post actions, check rate limits
+  // Filter out read actions if rate limited
+  const availableActions = READ_ACTIONS.filter(action => {
+    if (isReadAction(action)) {
+      return rateLimitHandler.canMakeReadRequest();
+    }
+    return true;
+  });
+  
+  // If no read actions available due to rate limits, skip to next post
+  if (availableActions.length === 0) {
+    console.log("⚠️ No read actions available due to rate limits. Skipping to next post cycle.");
+    const timeUntilNextPost = POST_INTERVAL - timeSinceLastPost;
+    console.log(`Next post in ${Math.round(timeUntilNextPost/1000)} seconds`);
+    
+    // Return a dummy action that we'll handle specially
+    return ACTIONS.POST_NO_IMAGE; // This will be handled as a skip
+  }
+  
+  // Pick the next available action in rotation
+  let action = READ_ACTIONS[currentActionIndex];
+  let attempts = 0;
+  
+  while (!availableActions.includes(action) && attempts < READ_ACTIONS.length) {
+    currentActionIndex = (currentActionIndex + 1) % READ_ACTIONS.length;
+    action = READ_ACTIONS[currentActionIndex];
+    attempts++;
+  }
+  
+  currentActionIndex = (currentActionIndex + 1) % READ_ACTIONS.length;
   return action;
 }
 
@@ -173,18 +193,15 @@ CONTENT STYLE REQUIREMENTS:
   * "The mystic tapestry of existence weaves through..."
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, use generate_image with a nature scene prompt using this EXACT style: "peaceful mountain lake at sunrise in Architectural illustration in highly abstract watercolor style with minimal linework. Painterly concept art with transparent color washes and deliberately ambiguous edges. Earth-toned palette against white space. Impressionistic, barely suggested forms with flowing brushstrokes" (width=768, height=768)
+1. First, use generate_image with a simple nature scene prompt (width=768, height=768)
 2. After generating the image, use get_latest_image_url to retrieve the correct image URL
 3. Use that EXACT URL with upload_image_and_tweet for your tweet
 
 IMAGE GENERATION GUIDELINES:
-- ALWAYS use the watercolor architectural illustration style specified above
-- Combine simple nature scenes with the artistic style
-- Keep base scene descriptions short: "mountain lake", "forest path", "ocean waves", "sunset sky"
-- Always append the full watercolor style description
-- Example full prompts: 
-  * "serene forest path in Architectural illustration in highly abstract watercolor style with minimal linework. Painterly concept art with transparent color washes and deliberately ambiguous edges. Earth-toned palette against white space. Impressionistic, barely suggested forms with flowing brushstrokes"
-  * "calm ocean waves in Architectural illustration in highly abstract watercolor style with minimal linework. Painterly concept art with transparent color washes and deliberately ambiguous edges. Earth-toned palette against white space. Impressionistic, barely suggested forms with flowing brushstrokes"
+- Use simple, clean prompts for nature scenes (mountain, forest, ocean, sunset)
+- Avoid complex artistic styles or abstract descriptions
+- Keep prompts under 15 words
+- Example good prompts: "peaceful mountain lake at sunrise", "serene forest path", "calm ocean waves"
 
 YOUR CONTENT GUIDELINES:
 - Post practical wisdom about personal development, productivity, and mindset
@@ -208,11 +225,22 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
   try {
     console.log("=== Starting scheduler cycle ===");
     
+    // Log rate limit status
+    const rateLimitStatus = rateLimitHandler.getStatus();
+    console.log("📊 Rate limit status:", rateLimitStatus);
+    
     // Reset tracking
     functionCalledThisCycle = false;
     
     // Determine next action
     const nextAction = getNextAction();
+    
+    // Check if we should skip this cycle due to rate limits
+    if (isReadAction(nextAction) && !rateLimitHandler.canMakeReadRequest()) {
+      console.log(`⚠️ Skipping ${nextAction} due to rate limits. Scheduling next cycle.`);
+      setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
+      return;
+    }
     
     // Update agent description to focus on the chosen action
     updateAgentForAction(nextAction);
@@ -266,34 +294,43 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
         case ACTIONS.REPLY_TARGETS:
           // Handle reply to target accounts through our custom reply manager
           console.log("Executing REPLY_TARGETS action through reply manager...");
-          await replyManager.startMonitoring('random', 15); // 0 means run once immediately
-          success = true;
+          
+          // Increment read attempts before making the request
+          rateLimitHandler.incrementReadAttempts();
+          
+          try {
+            await replyManager.startMonitoring('random', 15);
+            success = true;
+          } catch (error: any) {
+            // Handle Twitter API errors
+            rateLimitHandler.handleTwitterError(error);
+            throw error;
+          }
           break;
           
         default:
           // Handle all other actions
           console.log(`Executing ${nextAction} action...`);
-          await wisdom_agent.step({ verbose: true });
-          success = true;
+          
+          // Increment read attempts for read actions
+          if (isReadAction(nextAction)) {
+            rateLimitHandler.incrementReadAttempts();
+          }
+          
+          try {
+            await wisdom_agent.step({ verbose: true });
+            success = true;
+          } catch (error: any) {
+            // Handle Twitter API errors for read actions
+            if (isReadAction(nextAction)) {
+              rateLimitHandler.handleTwitterError(error);
+            }
+            throw error;
+          }
       }
     } catch (error: unknown) {
       const actionError = error as Error;
       console.error(`Action error (${nextAction}):`, actionError.message);
-      
-      // Handle rate limiting errors
-      if (actionError.message.includes('429') || actionError.message.includes('rate limit')) {
-        console.log("⚠️ Rate limit detected. Backing off...");
-        isRateLimited = true;
-        rateLimitResetTime = Date.now() + (15 * 60 * 1000); // Wait 15 minutes
-        
-        // Schedule retry after rate limit period
-        setTimeout(() => {
-          isRateLimited = false;
-          console.log("✅ Rate limit period ended, resuming normal operation");
-        }, 15 * 60 * 1000);
-        
-        return; // Skip this cycle
-      }
       
       // Special handling for image URL errors
       if (nextAction === ACTIONS.POST && 
@@ -335,10 +372,9 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       console.log(`Stats: ${totalPosts} total posts (${imagePosts} with images, ${textPosts} text-only)`);
     }
     
-    // Schedule next action with longer delay if rate limited
-    const nextInterval = isRateLimited ? (30 * 60 * 1000) : OTHER_ACTION_INTERVAL; // 30 min if rate limited
-    console.log(`Scheduling next action in ${nextInterval/1000} seconds`);
-    setTimeout(() => runAgentWithSchedule(0), nextInterval);
+    // Schedule next action
+    console.log(`Scheduling next action in ${OTHER_ACTION_INTERVAL/1000} seconds`);
+    setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
     
   } catch (error) {
     // Error handling with exponential backoff
@@ -359,7 +395,22 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
 // Create a simple HTTP server to keep the process alive
 const server = http.createServer((req, res) => {
   res.writeHead(200, {'Content-Type': 'text/plain'});
-  res.end('Wisdom Bot is running\n');
+  
+  const rateLimitStatus = rateLimitHandler.getStatus();
+  
+  res.end(`Wisdom Bot is running
+  
+Rate Limit Status:
+- Monthly Cap Exceeded: ${rateLimitStatus.monthlyCapExceeded}
+- Days Until Reset: ${rateLimitStatus.daysUntilReset}
+- Daily Read Attempts: ${rateLimitStatus.dailyAttempts}/${rateLimitStatus.maxDailyAttempts}
+- Reset Time: ${rateLimitStatus.resetTime ? new Date(rateLimitStatus.resetTime * 1000).toISOString() : 'N/A'}
+
+Bot Stats:
+- Total Posts: ${totalPosts}
+- Image Posts: ${imagePosts}
+- Text Posts: ${textPosts}
+`);
 });
 
 // Set up process error handlers
@@ -375,7 +426,9 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Heartbeat to show the process is still alive
 setInterval(() => {
+  const rateLimitStatus = rateLimitHandler.getStatus();
   console.log('Heartbeat check:', new Date().toISOString());
+  console.log('Rate limit status:', rateLimitStatus);
 }, 60000);
 
 async function main(): Promise<void> {
@@ -392,6 +445,9 @@ async function main(): Promise<void> {
     console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
     console.log(`IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}% (${IMAGE_POST_PROBABILITY * 100}% of posts will include images)`);
     console.log(`TEXT_POST_PROBABILITY: ${(1 - IMAGE_POST_PROBABILITY) * 100}% (${(1 - IMAGE_POST_PROBABILITY) * 100}% of posts will be text-only)`);
+    
+    // Set conservative daily read limits to prevent hitting monthly cap again
+    rateLimitHandler.setMaxDailyReadAttempts(20); // Very conservative
     
     // Sanitize description
     const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
