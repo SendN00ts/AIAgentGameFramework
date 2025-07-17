@@ -1,7 +1,6 @@
 import { wisdom_agent } from './agent';
 import * as http from 'http';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
-import { RateLimitHandler } from './plugins/rateLimitHandler';
 
 // Define actions as an enum to ensure type safety
 enum ACTIONS {
@@ -12,7 +11,7 @@ enum ACTIONS {
   SEARCH = 'search',
   LIKE = 'like',
   QUOTE = 'quote',
-  SKIP = 'skip' // Add skip action for when rate limited
+  SKIP = 'skip'
 }
 
 // Constant for image post probability (35%)
@@ -29,6 +28,13 @@ let totalPosts = 0;
 let imagePosts = 0;
 let textPosts = 0;
 
+// Rate limiting tracking
+let monthlyCapExceeded = false;
+let monthlyCapResetTime = 0;
+let dailyReadAttempts = 0;
+let lastResetDate = '';
+const maxDailyReadAttempts = 20;
+
 // Config for timing
 const POST_INTERVAL = 15 * 60 * 1000; 
 const OTHER_ACTION_INTERVAL = 10 * 60 * 1000; 
@@ -38,8 +44,62 @@ let currentActionIndex = 0;
 const READ_ACTIONS = [ACTIONS.REPLY, ACTIONS.REPLY_TARGETS, ACTIONS.SEARCH, ACTIONS.LIKE, ACTIONS.QUOTE];
 const WRITE_ACTIONS = [ACTIONS.POST, ACTIONS.POST_NO_IMAGE];
 
-// Get rate limit handler instance
-const rateLimitHandler = RateLimitHandler.getInstance();
+// Simple rate limit functions
+function resetDailyCounterIfNeeded(): void {
+  const today = new Date().toISOString().split('T')[0];
+  if (lastResetDate !== today) {
+    dailyReadAttempts = 0;
+    lastResetDate = today;
+    console.log(`📊 Daily read counter reset. Date: ${today}`);
+  }
+}
+
+function handleTwitterError(error: any): void {
+  if (error.code === 429 && error.data) {
+    const { title, detail, type } = error.data;
+    
+    if (title === 'UsageCapExceeded' && 
+        detail?.includes('Monthly product cap') && 
+        type === 'https://api.twitter.com/2/problems/usage-capped') {
+      
+      monthlyCapExceeded = true;
+      monthlyCapResetTime = error.rateLimit?.reset || 0;
+      
+      const resetDate = new Date(monthlyCapResetTime * 1000);
+      console.log(`🚫 MONTHLY CAP EXCEEDED! No more read operations until: ${resetDate.toISOString()}`);
+    }
+  }
+}
+
+function canMakeReadRequest(): boolean {
+  resetDailyCounterIfNeeded();
+  
+  // Check if monthly cap is exceeded
+  if (monthlyCapExceeded) {
+    const currentTime = Math.floor(Date.now() / 1000);
+    if (currentTime < monthlyCapResetTime) {
+      console.log(`🚫 Monthly cap exceeded. Cannot make read requests.`);
+      return false;
+    } else {
+      monthlyCapExceeded = false;
+      monthlyCapResetTime = 0;
+      console.log(`✅ Monthly cap reset! Read operations are now allowed.`);
+    }
+  }
+  
+  // Check daily limit
+  if (dailyReadAttempts >= maxDailyReadAttempts) {
+    console.log(`⚠️ Daily read limit reached (${maxDailyReadAttempts}). Skipping to preserve monthly quota.`);
+    return false;
+  }
+  
+  return true;
+}
+
+function incrementReadAttempts(): void {
+  dailyReadAttempts++;
+  console.log(`📊 Daily read attempts: ${dailyReadAttempts}/${maxDailyReadAttempts}`);
+}
 
 // Function to check if action requires reading from Twitter
 function isReadAction(action: ACTIONS): boolean {
@@ -58,7 +118,7 @@ function getNextAction(): ACTIONS {
   if (timeSinceLastPost >= POST_INTERVAL) {
     console.log("Time for a new post!");
     
-    // FIXED: Randomly decide image vs text EVERY TIME based on probability
+    // Randomly decide image vs text EVERY TIME based on probability
     const randomValue = Math.random();
     console.log(`Random value: ${randomValue.toFixed(3)}, Image threshold: ${IMAGE_POST_PROBABILITY}`);
     
@@ -79,8 +139,7 @@ function getNextAction(): ACTIONS {
   }
   
   // For non-post actions, check rate limits
-  // If rate limited, return SKIP instead of a fake post action
-  if (!rateLimitHandler.canMakeReadRequest()) {
+  if (!canMakeReadRequest()) {
     console.log("⚠️ No read actions available due to rate limits. Skipping this cycle.");
     const timeUntilNextPost = POST_INTERVAL - timeSinceLastPost;
     console.log(`Next post in ${Math.round(timeUntilNextPost/1000)} seconds`);
@@ -127,10 +186,11 @@ REMEMBER to get the image URL using get_latest_image_url() after generating the 
 
   if (action === ACTIONS.POST_NO_IMAGE) {
     additionalInstructions = `
-IMPORTANT: You should post text-only content.
-DO NOT use generate_image or try to include an image.
-Use the post_tweet function directly with your wisdom content.
-Create high-quality, thoughtful content that stands on its own without an image.
+CRITICAL: This is a TEXT-ONLY post. You are FORBIDDEN from generating any images.
+DO NOT use generate_image, generate_and_tweet, or upload_image_and_tweet functions.
+ONLY use the post_tweet function directly with your wisdom content.
+Do not attempt to create, fetch, or attach any images to this tweet.
+Create high-quality, thoughtful text content that stands on its own without an image.
 `;
   }
 
@@ -168,6 +228,25 @@ You MUST perform ONLY this action: ${actionDescriptions[action]}
 ${additionalInstructions}
 All other actions are forbidden in this cycle.
 
+${action === ACTIONS.POST_NO_IMAGE ? 
+`🚫 CRITICAL: TEXT-ONLY POST - NO IMAGES ALLOWED
+- Do NOT use generate_image
+- Do NOT use generate_and_tweet  
+- Do NOT use upload_image_and_tweet
+- ONLY use post_tweet function
+- Post pure text content without any image attachment
+` : ''}
+
+${action === ACTIONS.POST ? 
+`📸 IMAGE POST REQUIRED:
+- Randomly choose between nature or architectural watercolor style
+- Nature: Simple scenes like "mountain lake", "forest path", "ocean sunset"  
+- Architectural: "abstract watercolor architectural illustration with earth tones"
+- Use generate_image with chosen style prompt
+- Use get_latest_image_url to get the URL
+- Use upload_image_and_tweet to post with the image
+` : ''}
+
 CONTENT STYLE REQUIREMENTS:
 - BE DIRECT AND PRACTICAL - avoid overly poetic or metaphorical language
 - Focus on actionable advice and clear insights
@@ -186,18 +265,25 @@ CONTENT STYLE REQUIREMENTS:
   * "The mystic tapestry of existence weaves through..."
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, use generate_image with a simple nature scene prompt (width=768, height=768)
-2. After generating the image, use get_latest_image_url to retrieve the correct image URL
-3. Use that EXACT URL with upload_image_and_tweet for your tweet
+1. First, randomly choose between two image styles:
+   - NATURE STYLE: Simple nature scenes (50% chance)
+   - ARCHITECTURAL STYLE: Abstract watercolor architectural illustrations (50% chance)
+2. Generate image using generate_image with chosen style (width=768, height=768)
+3. Get the image URL using get_latest_image_url
+4. Use that EXACT URL with upload_image_and_tweet for your tweet
 
-IMAGE GENERATION GUIDELINES:
-- Use simple, clean prompts for nature scenes (mountain, forest, ocean, sunset)
-- Avoid complex artistic styles or abstract descriptions
-- Keep prompts under 15 words
-- Example good prompts: "peaceful mountain lake at sunrise", "serene forest path", "calm ocean waves"
+IMAGE STYLE EXAMPLES:
+- Nature: "peaceful mountain lake at sunrise", "serene forest path", "ocean waves at sunset"
+- Architectural: "abstract watercolor architectural sketch with minimal linework and earth tones", "minimalist architectural illustration in watercolor style", "abstract building silhouette in watercolor"
 
 YOUR CONTENT GUIDELINES:
-- Post practical wisdom about personal development, productivity, and mindset
+${action === ACTIONS.POST_NO_IMAGE ? 
+`🚫 TEXT-ONLY POST RULES:
+- Use ONLY the post_tweet function
+- Do NOT call any image-related functions
+- Focus on powerful, standalone text content
+- Make the message impactful without visual aids
+- ` : ''}Post practical wisdom about personal development, productivity, and mindset
 - Share clear, actionable quotes from successful people
 - Offer specific advice for improving daily life
 - Create content that provides immediate value
@@ -219,8 +305,11 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     console.log("=== Starting scheduler cycle ===");
     
     // Log rate limit status
-    const rateLimitStatus = rateLimitHandler.getStatus();
-    console.log("📊 Rate limit status:", rateLimitStatus);
+    console.log("📊 Rate limit status:", {
+      monthlyCapExceeded,
+      dailyAttempts: dailyReadAttempts,
+      maxDailyAttempts: maxDailyReadAttempts
+    });
     
     // Reset tracking
     functionCalledThisCycle = false;
@@ -236,7 +325,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     }
     
     // Check if we should skip this cycle due to rate limits (double check)
-    if (isReadAction(nextAction) && !rateLimitHandler.canMakeReadRequest()) {
+    if (isReadAction(nextAction) && !canMakeReadRequest()) {
       console.log(`⚠️ Double-check: Skipping ${nextAction} due to rate limits. Scheduling next cycle.`);
       setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
       return;
@@ -298,14 +387,14 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           console.log("Executing REPLY_TARGETS action through reply manager...");
           
           // Increment read attempts before making the request
-          rateLimitHandler.incrementReadAttempts();
+          incrementReadAttempts();
           
           try {
             await replyManager.startMonitoring('random', 15);
             success = true;
           } catch (error: any) {
             // Handle Twitter API errors
-            rateLimitHandler.handleTwitterError(error);
+            handleTwitterError(error);
             throw error;
           }
           break;
@@ -316,7 +405,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           
           // Increment read attempts for read actions
           if (isReadAction(nextAction)) {
-            rateLimitHandler.incrementReadAttempts();
+            incrementReadAttempts();
           }
           
           try {
@@ -325,7 +414,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           } catch (error: any) {
             // Handle Twitter API errors for read actions
             if (isReadAction(nextAction)) {
-              rateLimitHandler.handleTwitterError(error);
+              handleTwitterError(error);
             }
             throw error;
           }
@@ -400,16 +489,14 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
 const server = http.createServer((req, res) => {
   res.writeHead(200, {'Content-Type': 'text/plain'});
   
-  const rateLimitStatus = rateLimitHandler.getStatus();
   const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
   
   res.end(`Wisdom Bot is running
   
 Rate Limit Status:
-- Monthly Cap Exceeded: ${rateLimitStatus.monthlyCapExceeded}
-- Days Until Reset: ${rateLimitStatus.daysUntilReset}
-- Daily Read Attempts: ${rateLimitStatus.dailyAttempts}/${rateLimitStatus.maxDailyAttempts}
-- Reset Time: ${rateLimitStatus.resetTime ? new Date(rateLimitStatus.resetTime * 1000).toISOString() : 'N/A'}
+- Monthly Cap Exceeded: ${monthlyCapExceeded}
+- Daily Read Attempts: ${dailyReadAttempts}/${maxDailyReadAttempts}
+- Reset Time: ${monthlyCapResetTime ? new Date(monthlyCapResetTime * 1000).toISOString() : 'N/A'}
 
 Bot Stats:
 - Total Posts: ${totalPosts}
@@ -433,11 +520,10 @@ process.on('unhandledRejection', (reason, promise) => {
 
 // Heartbeat to show the process is still alive
 setInterval(() => {
-  const rateLimitStatus = rateLimitHandler.getStatus();
   const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
   console.log('Heartbeat check:', new Date().toISOString());
   console.log(`📊 Image percentage: ${imagePostPercentage.toFixed(1)}% (target: ${IMAGE_POST_PROBABILITY * 100}%)`);
-  console.log('Rate limit status:', rateLimitStatus);
+  console.log('Rate limit status:', { monthlyCapExceeded, dailyAttempts: dailyReadAttempts });
 }, 60000);
 
 async function main(): Promise<void> {
@@ -454,9 +540,6 @@ async function main(): Promise<void> {
     console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
     console.log(`🎯 IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}% (target for posts with images)`);
     console.log(`📝 TEXT_POST_PROBABILITY: ${(1 - IMAGE_POST_PROBABILITY) * 100}% (target for text-only posts)`);
-    
-    // Set conservative daily read limits to prevent hitting monthly cap again
-    rateLimitHandler.setMaxDailyReadAttempts(20); // Very conservative
     
     // Sanitize description
     const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');

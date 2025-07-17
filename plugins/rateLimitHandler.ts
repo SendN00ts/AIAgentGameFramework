@@ -1,4 +1,4 @@
-// rateLimitHandler.ts
+// plugins/rateLimitHandler.ts
 export class RateLimitHandler {
     private static instance: RateLimitHandler;
     private monthlyCapExceeded = false;
