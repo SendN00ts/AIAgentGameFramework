@@ -11,7 +11,8 @@ enum ACTIONS {
   REPLY_TARGETS = 'reply_targets',
   SEARCH = 'search',
   LIKE = 'like',
-  QUOTE = 'quote'
+  QUOTE = 'quote',
+  SKIP = 'skip' // Add skip action for when rate limited
 }
 
 // Constant for image post probability (35%)
@@ -57,59 +58,48 @@ function getNextAction(): ACTIONS {
   if (timeSinceLastPost >= POST_INTERVAL) {
     console.log("Time for a new post!");
     
-    // Randomly decide first, then check retry constraints
+    // FIXED: Randomly decide image vs text EVERY TIME based on probability
     const randomValue = Math.random();
-    const shouldTryImage = randomValue <= IMAGE_POST_PROBABILITY;
+    console.log(`Random value: ${randomValue.toFixed(3)}, Image threshold: ${IMAGE_POST_PROBABILITY}`);
     
-    if (shouldTryImage && imageRetryCount < MAX_IMAGE_RETRIES) {
-      console.log(`Randomly selected to post WITH image (probability: ${IMAGE_POST_PROBABILITY * 100}%)`);
-      return ACTIONS.POST;
-    } else {
-      if (shouldTryImage && imageRetryCount >= MAX_IMAGE_RETRIES) {
-        console.log(`⚠️ Would post with image but max retries reached. Posting text-only.`);
-        imageRetryCount = 0; // Reset for next cycle
+    if (randomValue <= IMAGE_POST_PROBABILITY) {
+      // Try to post with image, but check retry count
+      if (imageRetryCount < MAX_IMAGE_RETRIES) {
+        console.log(`✅ Selected POST WITH image (${(randomValue * 100).toFixed(1)}% <= ${IMAGE_POST_PROBABILITY * 100}%)`);
+        return ACTIONS.POST;
       } else {
-        console.log(`Randomly selected to post WITHOUT image (probability: ${(1 - IMAGE_POST_PROBABILITY) * 100}%)`);
+        console.log(`⚠️ Would post with image but max retries reached (${imageRetryCount}/${MAX_IMAGE_RETRIES}). Forcing text-only.`);
+        imageRetryCount = 0; // Reset for next cycle
+        return ACTIONS.POST_NO_IMAGE;
       }
+    } else {
+      console.log(`✅ Selected POST WITHOUT image (${(randomValue * 100).toFixed(1)}% > ${IMAGE_POST_PROBABILITY * 100}%)`);
       return ACTIONS.POST_NO_IMAGE;
     }
   }
   
   // For non-post actions, check rate limits
-  // Filter out read actions if rate limited
-  const availableActions = READ_ACTIONS.filter(action => {
-    if (isReadAction(action)) {
-      return rateLimitHandler.canMakeReadRequest();
-    }
-    return true;
-  });
-  
-  // If no read actions available due to rate limits, skip to next post
-  if (availableActions.length === 0) {
-    console.log("⚠️ No read actions available due to rate limits. Skipping to next post cycle.");
+  // If rate limited, return SKIP instead of a fake post action
+  if (!rateLimitHandler.canMakeReadRequest()) {
+    console.log("⚠️ No read actions available due to rate limits. Skipping this cycle.");
     const timeUntilNextPost = POST_INTERVAL - timeSinceLastPost;
     console.log(`Next post in ${Math.round(timeUntilNextPost/1000)} seconds`);
-    
-    // Return a dummy action that we'll handle specially
-    return ACTIONS.POST_NO_IMAGE; // This will be handled as a skip
+    return ACTIONS.SKIP;
   }
   
-  // Pick the next available action in rotation
-  let action = READ_ACTIONS[currentActionIndex];
-  let attempts = 0;
-  
-  while (!availableActions.includes(action) && attempts < READ_ACTIONS.length) {
-    currentActionIndex = (currentActionIndex + 1) % READ_ACTIONS.length;
-    action = READ_ACTIONS[currentActionIndex];
-    attempts++;
-  }
-  
+  // Pick the next action in rotation from available read actions
+  const action = READ_ACTIONS[currentActionIndex];
   currentActionIndex = (currentActionIndex + 1) % READ_ACTIONS.length;
   return action;
 }
 
 // Function to update agent description with proper typing
 function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): void {
+  // Skip updating agent for SKIP action
+  if (action === ACTIONS.SKIP) {
+    return;
+  }
+  
   // Create new focused description with proper typing
   const actionDescriptions: Record<ACTIONS, string> = {
     [ACTIONS.POST]: "POST original wisdom content with images",
@@ -118,7 +108,8 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
     [ACTIONS.REPLY_TARGETS]: "REPLY to wellness and philosophy accounts (use find_target_account and reply_tweet)",
     [ACTIONS.SEARCH]: "SEARCH for relevant wisdom discussions",
     [ACTIONS.LIKE]: "LIKE meaningful philosophical content",
-    [ACTIONS.QUOTE]: "QUOTE other wisdom tweets with your commentary"
+    [ACTIONS.QUOTE]: "QUOTE other wisdom tweets with your commentary",
+    [ACTIONS.SKIP]: "SKIP this cycle"
   };
   
   // Add regeneration hint if needed
@@ -136,7 +127,7 @@ REMEMBER to get the image URL using get_latest_image_url() after generating the 
 
   if (action === ACTIONS.POST_NO_IMAGE) {
     additionalInstructions = `
-IMPORTANT: After several failed attempts with images, you should post text-only content.
+IMPORTANT: You should post text-only content.
 DO NOT use generate_image or try to include an image.
 Use the post_tweet function directly with your wisdom content.
 Create high-quality, thoughtful content that stands on its own without an image.
@@ -187,6 +178,8 @@ CONTENT STYLE REQUIREMENTS:
   * "The best time to start was yesterday. The second best time is now."
   * "Your thoughts create your reality. Choose them wisely."
   * "Success isn't about never failing. It's about learning from every failure."
+  * "Stop waiting for motivation. Start building discipline."
+  * "Your mindset determines your reality. Choose thoughts that serve you."
 - Examples of BAD content (too poetic/vague):
   * "Silent beneath the surface, truths intertwine through the endless giving..."
   * "Whispers of ancient wisdom dance through the ethereal realm..."
@@ -235,9 +228,16 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     // Determine next action
     const nextAction = getNextAction();
     
-    // Check if we should skip this cycle due to rate limits
+    // Handle SKIP action
+    if (nextAction === ACTIONS.SKIP) {
+      console.log("⏭️ Skipping this cycle due to rate limits. Scheduling next cycle.");
+      setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
+      return;
+    }
+    
+    // Check if we should skip this cycle due to rate limits (double check)
     if (isReadAction(nextAction) && !rateLimitHandler.canMakeReadRequest()) {
-      console.log(`⚠️ Skipping ${nextAction} due to rate limits. Scheduling next cycle.`);
+      console.log(`⚠️ Double-check: Skipping ${nextAction} due to rate limits. Scheduling next cycle.`);
       setTimeout(() => runAgentWithSchedule(0), OTHER_ACTION_INTERVAL);
       return;
     }
@@ -254,7 +254,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       switch (nextAction) {
         case ACTIONS.POST:
           // For posts, add special error handling to detect image URL issues
-          console.log("Executing POST action...");
+          console.log("Executing POST action (with image)...");
           const result = await wisdom_agent.step({ verbose: true });
           
           // Check if response contains any indication of image URL issues
@@ -280,15 +280,17 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
             // Success! Reset image retry counter
             imageRetryCount = 0;
             success = true;
+            console.log("✅ Image post successful!");
           }
           break;
         
         case ACTIONS.POST_NO_IMAGE:
           // Posting without an image
-          console.log("Executing POST_NO_IMAGE action...");
+          console.log("Executing POST_NO_IMAGE action (text only)...");
           await wisdom_agent.step({ verbose: true });
           imageRetryCount = 0; // Reset counter after successful post
           success = true;
+          console.log("✅ Text-only post successful!");
           break;
           
         case ACTIONS.REPLY_TARGETS:
@@ -363,13 +365,15 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       
       if (nextAction === ACTIONS.POST) {
         imagePosts++;
+        console.log(`📊 Image post recorded. Total: ${imagePosts} image posts`);
       } else if (nextAction === ACTIONS.POST_NO_IMAGE) {
         textPosts++;
+        console.log(`📊 Text post recorded. Total: ${textPosts} text posts`);
       }
       
       const imagePostPercentage = (imagePosts / totalPosts) * 100;
-      console.log(`Post completed. Target: ${IMAGE_POST_PROBABILITY * 100}% images, Actual: ${imagePostPercentage.toFixed(1)}%`);
-      console.log(`Stats: ${totalPosts} total posts (${imagePosts} with images, ${textPosts} text-only)`);
+      console.log(`📈 Post Stats - Target: ${IMAGE_POST_PROBABILITY * 100}% images, Actual: ${imagePostPercentage.toFixed(1)}%`);
+      console.log(`📊 Total: ${totalPosts} posts (${imagePosts} with images, ${textPosts} text-only)`);
     }
     
     // Schedule next action
@@ -397,6 +401,7 @@ const server = http.createServer((req, res) => {
   res.writeHead(200, {'Content-Type': 'text/plain'});
   
   const rateLimitStatus = rateLimitHandler.getStatus();
+  const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
   
   res.end(`Wisdom Bot is running
   
@@ -408,8 +413,10 @@ Rate Limit Status:
 
 Bot Stats:
 - Total Posts: ${totalPosts}
-- Image Posts: ${imagePosts}
-- Text Posts: ${textPosts}
+- Image Posts: ${imagePosts} (${imagePostPercentage.toFixed(1)}%)
+- Text Posts: ${textPosts} (${(100 - imagePostPercentage).toFixed(1)}%)
+- Target Image %: ${IMAGE_POST_PROBABILITY * 100}%
+- Actual Image %: ${imagePostPercentage.toFixed(1)}%
 `);
 });
 
@@ -427,7 +434,9 @@ process.on('unhandledRejection', (reason, promise) => {
 // Heartbeat to show the process is still alive
 setInterval(() => {
   const rateLimitStatus = rateLimitHandler.getStatus();
+  const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
   console.log('Heartbeat check:', new Date().toISOString());
+  console.log(`📊 Image percentage: ${imagePostPercentage.toFixed(1)}% (target: ${IMAGE_POST_PROBABILITY * 100}%)`);
   console.log('Rate limit status:', rateLimitStatus);
 }, 60000);
 
@@ -443,8 +452,8 @@ async function main(): Promise<void> {
     console.log("API_KEY present:", !!process.env.API_KEY);
     console.log("TWITTER_API_KEY present:", !!process.env.TWITTER_API_KEY);
     console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
-    console.log(`IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}% (${IMAGE_POST_PROBABILITY * 100}% of posts will include images)`);
-    console.log(`TEXT_POST_PROBABILITY: ${(1 - IMAGE_POST_PROBABILITY) * 100}% (${(1 - IMAGE_POST_PROBABILITY) * 100}% of posts will be text-only)`);
+    console.log(`🎯 IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}% (target for posts with images)`);
+    console.log(`📝 TEXT_POST_PROBABILITY: ${(1 - IMAGE_POST_PROBABILITY) * 100}% (target for text-only posts)`);
     
     // Set conservative daily read limits to prevent hitting monthly cap again
     rateLimitHandler.setMaxDailyReadAttempts(20); // Very conservative
@@ -488,11 +497,21 @@ async function main(): Promise<void> {
     const forceWithImage = Math.random() <= IMAGE_POST_PROBABILITY;
     const initialAction = forceWithImage ? ACTIONS.POST : ACTIONS.POST_NO_IMAGE;
     
-    console.log(`Forcing initial ${initialAction} action (${forceWithImage ? 'with' : 'without'} image)...`);
+    console.log(`🚀 Forcing initial ${initialAction} action (${forceWithImage ? 'with' : 'without'} image)...`);
     updateAgentForAction(initialAction);
     wisdom_agent.step({ verbose: true })
-      .then(() => console.log("Force post successful"))
-      .catch(err => console.error("Force post failed:", err));
+      .then(() => {
+        console.log("✅ Force post successful");
+        // Update stats for the forced post
+        lastPostTime = Date.now();
+        totalPosts++;
+        if (initialAction === ACTIONS.POST) {
+          imagePosts++;
+        } else {
+          textPosts++;
+        }
+      })
+      .catch(err => console.error("❌ Force post failed:", err));
       
     // Start scheduling after a delay
     setTimeout(() => {
