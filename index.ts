@@ -19,6 +19,8 @@ const IMAGE_POST_PROBABILITY = 0.35;
 
 // Tracking variables
 let lastPostTime = 0;
+let dailyReplies = 0;
+const REPLIES_PER_DAY_TARGET = 50;
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 2;
@@ -49,6 +51,7 @@ function resetDailyCounterIfNeeded(): void {
   const today = new Date().toISOString().split('T')[0];
   if (lastResetDate !== today) {
     dailyReadAttempts = 0;
+    dailyReplies = 0;
     lastResetDate = today;
     console.log(`📊 Daily read counter reset. Date: ${today}`);
   }
@@ -101,6 +104,11 @@ function incrementReadAttempts(): void {
   console.log(`📊 Daily read attempts: ${dailyReadAttempts}/${maxDailyReadAttempts}`);
 }
 
+function incrementReplyCount(): void {
+  dailyReplies++;
+  console.log(`📨 Replies today: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}`);
+}
+
 // Function to check if action requires reading from Twitter
 function isReadAction(action: ACTIONS): boolean {
   return READ_ACTIONS.includes(action);
@@ -144,6 +152,12 @@ function getNextAction(): ACTIONS {
     const timeUntilNextPost = POST_INTERVAL - timeSinceLastPost;
     console.log(`Next post in ${Math.round(timeUntilNextPost/1000)} seconds`);
     return ACTIONS.SKIP;
+  }
+
+  // Prioritize reply targets until quota is met
+  if (dailyReplies < REPLIES_PER_DAY_TARGET) {
+    console.log(`📨 Prioritizing REPLY_TARGETS to reach 50 replies/day (currently at ${dailyReplies})`);
+    return ACTIONS.REPLY_TARGETS;
   }
   
   // Pick the next action in rotation from available read actions
@@ -239,10 +253,12 @@ ${action === ACTIONS.POST_NO_IMAGE ?
 
 ${action === ACTIONS.POST ? 
 `📸 IMAGE POST REQUIRED:
-- Randomly choose between nature or architectural watercolor style
-- Nature: Simple scenes like "mountain lake", "forest path", "ocean sunset"  
-- Architectural: "abstract watercolor architectural illustration with earth tones"
-- Use generate_image with chosen style prompt
+- Style: Moody architectural watercolor illustrations only
+- Example prompts:
+  * "moody architectural watercolor with soft edges, diffused light, and minimal detail — arched windows and shadow play, muted earth tones and cool greys"
+  * "sunlit corridor in architectural watercolor style, impressionistic, showing soft shadows and blurred textures"
+  * "interior architecture rendered in moody watercolor style, atmospheric lighting, minimal linework, fine art tonal balance"
+- Use generate_image with one of these prompts (width=768, height=768)
 - Use get_latest_image_url to get the URL
 - Use upload_image_and_tweet to post with the image
 ` : ''}
@@ -265,16 +281,17 @@ CONTENT STYLE REQUIREMENTS:
   * "The mystic tapestry of existence weaves through..."
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. First, randomly choose between two image styles:
-   - NATURE STYLE: Simple nature scenes (50% chance)
-   - ARCHITECTURAL STYLE: Abstract watercolor architectural illustrations (50% chance)
+1. Always use architectural style prompts:
+   - Abstract watercolor architectural illustrations only
 2. Generate image using generate_image with chosen style (width=768, height=768)
 3. Get the image URL using get_latest_image_url
 4. Use that EXACT URL with upload_image_and_tweet for your tweet
 
 IMAGE STYLE EXAMPLES:
-- Nature: "peaceful mountain lake at sunrise", "serene forest path", "ocean waves at sunset"
-- Architectural: "abstract watercolor architectural sketch with minimal linework and earth tones", "minimalist architectural illustration in watercolor style", "abstract building silhouette in watercolor"
+- Architectural:
+  * "moody architectural watercolor with soft edges, diffused light, and minimal detail — arched windows and shadow play, muted earth tones and cool greys"
+  * "sunlit corridor in architectural watercolor style, impressionistic, showing soft shadows and blurred textures"
+  * "interior architecture rendered in moody watercolor style, atmospheric lighting, minimal linework, fine art tonal balance"
 
 YOUR CONTENT GUIDELINES:
 ${action === ACTIONS.POST_NO_IMAGE ? 
@@ -391,6 +408,7 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           
           try {
             await replyManager.startMonitoring('random', 15);
+            incrementReplyCount();
             success = true;
           } catch (error: any) {
             // Handle Twitter API errors
@@ -504,6 +522,7 @@ Bot Stats:
 - Text Posts: ${textPosts} (${(100 - imagePostPercentage).toFixed(1)}%)
 - Target Image %: ${IMAGE_POST_PROBABILITY * 100}%
 - Actual Image %: ${imagePostPercentage.toFixed(1)}%
+- Replies Today: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}
 `);
 });
 
@@ -524,6 +543,7 @@ setInterval(() => {
   console.log('Heartbeat check:', new Date().toISOString());
   console.log(`📊 Image percentage: ${imagePostPercentage.toFixed(1)}% (target: ${IMAGE_POST_PROBABILITY * 100}%)`);
   console.log('Rate limit status:', { monthlyCapExceeded, dailyAttempts: dailyReadAttempts });
+  console.log(`📨 Daily replies: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}`);
 }, 60000);
 
 async function main(): Promise<void> {
