@@ -602,19 +602,20 @@ async function main(): Promise<void> {
     
     console.log(`🚀 Forcing initial ${initialAction} action (${forceWithImage ? 'with' : 'without'} image)...`);
     updateAgentForAction(initialAction);
-    wisdom_agent.step({ verbose: true })
-      .then(() => {
-        console.log("✅ Force post successful");
-        // Update stats for the forced post
-        lastPostTime = Date.now();
-        totalPosts++;
-        if (initialAction === ACTIONS.POST) {
-          imagePosts++;
-        } else {
-          textPosts++;
-        }
-      })
-      .catch(err => console.error("❌ Force post failed:", err));
+    try {
+      await wisdom_agent.step({ verbose: true });
+      console.log("✅ Force post successful");
+      // Update stats for the forced post
+      lastPostTime = Date.now();
+      totalPosts++;
+      if (initialAction === ACTIONS.POST) {
+        imagePosts++;
+      } else {
+        textPosts++;
+      }
+    } catch (err) {
+      console.error("❌ Force post failed:", err);
+    }
       
     // Start scheduling after a delay
     setTimeout(() => {
