@@ -3,7 +3,15 @@ import { TwitterApi } from 'twitter-api-v2';
 import * as fs from 'fs';
 import * as path from 'path';
 
-// Define types for target accounts
+interface CachedAccount {
+  userId: string;
+  username: string;
+  timestamp: number;
+}
+
+const accountCache: Map<string, CachedAccount> = new Map();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 hours
+
 interface TargetAccount {
   handle: string;
   description: string;
@@ -26,10 +34,8 @@ export function createReplyGuyWorker(
     accessSecret: accessSecret,
   });
 
-  // Function to load and parse the target accounts with multiple path checks
   function loadTargetAccounts(): TargetCategories {
     try {
-      // Try multiple possible locations
       const possiblePaths = [
         path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json'),
         path.resolve(process.cwd(), 'plugins/target_accounts.json'),
@@ -53,12 +59,37 @@ export function createReplyGuyWorker(
     }
   }
 
-  // Function to check if text contains hashtags 
   function containsHashtags(text?: string): boolean {
     return Boolean(text && text.includes('#'));
   }
 
-  // Find a target account to reply to
+  async function getUserId(username: string): Promise<string | null> {
+    const cached = accountCache.get(username);
+    const now = Date.now();
+    
+    if (cached && (now - cached.timestamp) < CACHE_TTL) {
+      console.log(`✅ Using cached userId for ${username}`);
+      return cached.userId;
+    }
+    
+    try {
+      const userResponse = await twitterClient.v2.userByUsername(username);
+      if (!userResponse.data) return null;
+      
+      accountCache.set(username, {
+        userId: userResponse.data.id,
+        username: username,
+        timestamp: now
+      });
+      
+      console.log(`📥 Cached userId for ${username}`);
+      return userResponse.data.id;
+    } catch (error) {
+      console.error(`Error fetching user ${username}:`, error);
+      return null;
+    }
+  }
+
   const findTargetAccount = new GameFunction({
     name: "find_target_account",
     description: "Find a target wellness account and their latest tweet to reply to",
@@ -69,7 +100,6 @@ export function createReplyGuyWorker(
       try {
         const { category = "random" } = args;
         
-        // Load target accounts
         const allTargetAccounts = loadTargetAccounts();
         
         if (Object.keys(allTargetAccounts).length === 0) {
@@ -79,7 +109,6 @@ export function createReplyGuyWorker(
           );
         }
         
-        // Select category
         let targetCategory: string;
         if (category === "random") {
           const categories = Object.keys(allTargetAccounts);
@@ -93,32 +122,27 @@ export function createReplyGuyWorker(
           );
         }
         
-        // Select random account from category
         const accounts = allTargetAccounts[targetCategory];
         const randomAccount = accounts[Math.floor(Math.random() * accounts.length)];
         
         if (logger) logger(`Selected account: ${randomAccount.handle} from category: ${targetCategory}`);
         console.log(`🎯 Selected target account: ${randomAccount.handle} (${targetCategory})`);
         
-        // Extract username without @ symbol
         const username = randomAccount.handle.replace('@', '');
         
         try {
-          // First find the user ID
-          const userResponse = await twitterClient.v2.userByUsername(username);
+          const userId = await getUserId(username);
           
-          if (!userResponse.data) {
+          if (!userId) {
             return new ExecutableGameFunctionResponse(
               ExecutableGameFunctionStatus.Failed,
               `Could not find Twitter user with username: ${username}`
             );
           }
           
-          const userId = userResponse.data.id;
-          
-          // Get latest tweets
+          // OPTIMIZATION: Get only 1 tweet instead of 5
           const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
-            max_results: 5, 
+            max_results: 1,
             "tweet.fields": ["created_at", "text"]
           });
           
@@ -129,10 +153,8 @@ export function createReplyGuyWorker(
             );
           }
           
-          // Get the latest tweet
           const latestTweet = tweetsResponse.data.data[0];
           
-          // Check if tweet has a valid creation date
           if (!latestTweet.created_at) {
             console.log(`No valid date for tweet from ${username}`);
             return new ExecutableGameFunctionResponse(
@@ -149,18 +171,15 @@ export function createReplyGuyWorker(
             );
           }
           
-          // Parse the date safely
           let tweetDate: Date;
           try {
             tweetDate = new Date(latestTweet.created_at);
             if (isNaN(tweetDate.getTime())) throw new Error("Invalid date");
           } catch (e) {
             console.log(`Invalid date format for tweet from ${username}`);
-            // Use current date to avoid skipping
             tweetDate = new Date();
           }
           
-          // Check if tweet is too old (older than 3 months)
           const threeMonthsAgo = new Date();
           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
           
@@ -202,7 +221,6 @@ export function createReplyGuyWorker(
     }
   });
   
-  // Function to reply to a tweet
   const replyTweet = new GameFunction({
     name: "reply_tweet",
     description: "Reply to a specific tweet with personalized content",
@@ -228,7 +246,6 @@ export function createReplyGuyWorker(
           );
         }
         
-        // Check for hashtags
         if (containsHashtags(reply_text)) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
@@ -236,7 +253,6 @@ export function createReplyGuyWorker(
           );
         }
 
-        // Check if reply text resembles a command or is too short/generic
         if (reply_text && (
           reply_text.includes('generate_and_tweet(') || 
           reply_text.includes('generate_image(') || 
@@ -248,8 +264,8 @@ export function createReplyGuyWorker(
           reply_text === "go_to" ||
           reply_text === "wait" ||
           reply_text.length < 10 ||
-          /^[a-z_]+$/.test(reply_text) || // Single word commands
-          /^[a-zA-Z_]+\(['"].+['"]\)/.test(reply_text) // Function call patterns
+          /^[a-z_]+$/.test(reply_text) ||
+          /^[a-zA-Z_]+\(['"].+['"]\)/.test(reply_text)
         )) {
           console.log("⚠️ Invalid reply content detected:", reply_text);
           return new ExecutableGameFunctionResponse(
@@ -261,7 +277,6 @@ export function createReplyGuyWorker(
         console.log(`📝 Replying to tweet ${tweet_id} with: ${reply_text}`);
         if (logger) logger(`Replying to tweet ${tweet_id}`);
         
-        // Post the reply
         const replyResponse = await twitterClient.v2.reply(reply_text, tweet_id);
         
         if (!replyResponse.data) {
@@ -289,7 +304,6 @@ export function createReplyGuyWorker(
     }
   });
 
-  // Monitor specific accounts for new tweets and reply automatically
   const monitorAndReply = new GameFunction({
     name: "monitor_and_auto_reply",
     description: "Monitor specified accounts for new tweets and automatically reply to them",
@@ -301,15 +315,11 @@ export function createReplyGuyWorker(
       try {
         const { category = "random", check_interval = 15 } = args;
 
-        // This is just a trigger function - the actual monitoring happens outside
-        // Set up a recurring job that will use find_target_account + reply_tweet periodically
-
         console.log(`🔄 Setting up automatic monitoring for category: ${category}`);
         console.log(`⏰ Check interval: ${check_interval} minutes`);
         
         if (logger) logger(`Set up automatic reply monitoring for ${category} accounts`);
         
-        // Return the configuration so the outer system can set up the job
         return new ExecutableGameFunctionResponse(
           ExecutableGameFunctionStatus.Done,
           JSON.stringify({
