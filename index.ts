@@ -344,7 +344,9 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
             success = true;
           } catch (error: any) {
             handleTwitterError(error);
-            throw error;
+            console.log(`⚠️ Reply failed, not counting toward daily total`);
+            // Don't throw - let scheduler continue
+            success = false;
           }
           break;
           
