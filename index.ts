@@ -33,7 +33,7 @@ let dailyReadAttempts = 0;
 let lastResetDate = '';
 const maxDailyReadAttempts = 20;
 
-const POST_INTERVAL = 3 * 60 * 1000; // ~5 posts per day (every 4.8 hours)
+const POST_INTERVAL = 10 * 60 * 1000; // ~5 posts per day (every 4.8 hours)
 const REPLY_INTERVAL = 29 * 60 * 1000; // ~50 replies per day (every 29 minutes)
 const OTHER_ACTION_INTERVAL = 60 * 60 * 1000; // 1 hour for other actions
 
@@ -299,7 +299,20 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       switch (nextAction) {
         case ACTIONS.POST:
           console.log("Executing POST action (with image)...");
-          const result = await wisdom_agent.step({ verbose: true });
+          let result;
+          try {
+            result = await wisdom_agent.step({ verbose: true });
+          } catch (stepError: any) {
+            // Handle Virtuals API rate limit
+            if (stepError.status === 429 || stepError.response?.status === 429) {
+              const retryAfter = stepError.response?.headers?.['retry-after'] || 60;
+              console.log(`⚠️ Virtuals API rate limit hit. Retry after ${retryAfter}s`);
+              // Schedule this post for later
+              setTimeout(() => runAgentWithSchedule(0), retryAfter * 1000);
+              return;
+            }
+            throw stepError;
+          }
           
           if (result && typeof result === 'string' && 
              (result.includes("invalid image URL") || 
@@ -364,7 +377,9 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
             if (isReadAction(nextAction)) {
               handleTwitterError(error);
             }
-            throw error;
+            // Don't throw - let scheduler continue
+            console.log(`⚠️ Action ${nextAction} failed:`, error.message);
+            success = false;
           }
       }
     } catch (error: unknown) {
