@@ -33,7 +33,7 @@ let dailyReadAttempts = 0;
 let lastResetDate = '';
 const maxDailyReadAttempts = 20;
 
-const POST_INTERVAL = 10 * 60 * 1000; // ~5 posts per day (every 4.8 hours)
+const POST_INTERVAL = 5 * 60 * 1000; // ~5 posts per day (every 4.8 hours)
 const REPLY_INTERVAL = 29 * 60 * 1000; // ~50 replies per day (every 29 minutes)
 const OTHER_ACTION_INTERVAL = 60 * 60 * 1000; // 1 hour for other actions
 
