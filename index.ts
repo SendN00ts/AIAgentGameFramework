@@ -156,108 +156,54 @@ function getNextAction(): ACTIONS {
 function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): void {
   if (action === ACTIONS.SKIP) return;
   
-  const actionDescriptions: Record<ACTIONS, string> = {
-    [ACTIONS.POST]: "POST original wisdom content with images",
-    [ACTIONS.POST_NO_IMAGE]: "POST original wisdom content WITHOUT an image (use post_tweet directly)",
-    [ACTIONS.REPLY]: "REPLY to existing philosophical conversations",
-    [ACTIONS.REPLY_TARGETS]: "REPLY to wellness and philosophy accounts (use find_target_account and reply_tweet)",
-    [ACTIONS.SEARCH]: "SEARCH for relevant wisdom discussions",
-    [ACTIONS.LIKE]: "LIKE meaningful philosophical content",
-    [ACTIONS.QUOTE]: "QUOTE other wisdom tweets with your commentary",
-    [ACTIONS.SKIP]: "SKIP this cycle"
-  };
-  
-  let additionalInstructions = "";
-  if (needsImageRegeneration && action === ACTIONS.POST) {
-    additionalInstructions = `
-IMPORTANT: Previous attempt failed due to image URL issues (attempt ${imageRetryCount+1}/${MAX_IMAGE_RETRIES}).
-Please generate a FRESH NEW IMAGE using generate_image before posting.
-DO NOT reuse previous image URLs. Generate a completely new image with a simpler prompt.
-Use simpler image descriptions with fewer details for more reliable processing.
-Use smaller image dimensions (width=768, height=768) for better reliability.
-REMEMBER to get the image URL using get_latest_image_url() after generating the image.
-`;
-  }
-
+  // ULTRA-SIMPLE INSTRUCTIONS FOR DEEPSEEK
   if (action === ACTIONS.POST_NO_IMAGE) {
-    additionalInstructions = `
-CRITICAL: This is a TEXT-ONLY post. You are FORBIDDEN from generating any images.
-DO NOT use generate_image, generate_and_tweet, or upload_image_and_tweet functions.
-ONLY use the post_tweet function directly with your wisdom content.
-Do not attempt to create, fetch, or attach any images to this tweet.
-Create high-quality, thoughtful text content that stands on its own without an image.
-`;
+    wisdom_agent.description = `ACTION: Call post_tweet() with wisdom content NOW.
+
+Rules:
+- NO hashtags
+- 1-2 sentences only
+- Direct and practical
+
+Example: post_tweet("Small daily improvements create lasting change.")
+
+Call post_tweet() immediately.`;
+    return;
+  }
+  
+  if (action === ACTIONS.POST) {
+    wisdom_agent.description = `ACTION: Post wisdom with image in 3 steps:
+
+Step 1: generate_image("architectural watercolor in moody style", 768, 768)
+Step 2: get_latest_image_url()
+Step 3: upload_image_and_tweet("your wisdom content", "image_url_from_step_2")
+
+Rules: NO hashtags, keep content practical and short
+
+Execute all 3 steps NOW.`;
+    return;
   }
 
   if (action === ACTIONS.REPLY_TARGETS) {
-    additionalInstructions = `
-IMPORTANT STEPS FOR REPLYING TO TARGET ACCOUNTS:
-1. First use find_target_account to get information about a target wellness account and their latest tweet
-2. Review the account description and tweet content carefully
-3. Then use reply_tweet with the exact tweet ID to create a thoughtful, personalized reply
-4. Be authentic, supportive and natural in your reply
-5. Keep replies concise (1-3 sentences)
-6. IMPORTANT: DO NOT USE HASHTAGS IN YOUR REPLIES
-`;
+    wisdom_agent.description = `ACTION: Reply to a target account in 2 steps:
+
+Step 1: find_target_account()
+Step 2: reply_tweet(tweet_id, "your supportive reply")
+
+Rules: NO hashtags, be authentic, 1-2 sentences
+
+Execute both steps NOW.`;
+    return;
   }
   
-  wisdom_agent.description = `You are a practical wisdom-sharing Twitter bot that posts clear, actionable insights.
-
-CRITICAL INSTRUCTION: You must perform EXACTLY ONE ACTION PER STEP - no more.
-
-IMPORTANT RULE: NO HASHTAGS ALLOWED IN ANY TWEETS OR REPLIES.
-
-CURRENT REQUIRED ACTION: ${action.toUpperCase()}
-
-You MUST perform ONLY this action: ${actionDescriptions[action]}
-${additionalInstructions}
-All other actions are forbidden in this cycle.
-
-${action === ACTIONS.POST_NO_IMAGE ? 
-`🚫 CRITICAL: TEXT-ONLY POST - NO IMAGES ALLOWED
-- Do NOT use generate_image
-- Do NOT use generate_and_tweet  
-- Do NOT use upload_image_and_tweet
-- ONLY use post_tweet function
-- Post pure text content without any image attachment
-` : ''}
-
-${action === ACTIONS.POST ? 
-`📸 IMAGE POST REQUIRED:
-- Style: Moody architectural watercolor illustrations only
-- Example prompts:
-  * "moody architectural watercolor with soft edges, diffused light, and minimal detail — arched windows and shadow play, muted earth tones and cool greys"
-  * "sunlit corridor in architectural watercolor style, impressionistic, showing soft shadows and blurred textures"
-  * "interior architecture rendered in moody watercolor style, atmospheric lighting, minimal linework, fine art tonal balance"
-- Use generate_image with one of these prompts (width=768, height=768)
-- Use get_latest_image_url to get the URL
-- Use upload_image_and_tweet to post with the image
-` : ''}
-
-CONTENT STYLE REQUIREMENTS:
-- BE DIRECT AND PRACTICAL - avoid overly poetic or metaphorical language
-- Focus on actionable advice and clear insights
-- Use simple, straightforward language that anyone can understand
-- Avoid vague mystical references or abstract concepts
-- Examples of GOOD content:
-  * "Focus on progress, not perfection. Small daily improvements compound over time."
-  * "The best time to start was yesterday. The second best time is now."
-  * "Your thoughts create your reality. Choose them wisely."
-  * "Success isn't about never failing. It's about learning from every failure."
-  * "Stop waiting for motivation. Start building discipline."
-
-YOUR CONTENT GUIDELINES:
-${action === ACTIONS.POST_NO_IMAGE ? 
-`🚫 TEXT-ONLY POST RULES:
-- Use ONLY the post_tweet function
-- Do NOT call any image-related functions
-- Focus on powerful, standalone text content
-- ` : ''}Post practical wisdom about personal development, productivity, and mindset
-- Share clear, actionable quotes from successful people
-- Offer specific advice for improving daily life
-- Create content that provides immediate value
-
-REMEMBER: ONE ACTION PER STEP ONLY.`;
+  // For other actions, keep simple
+  const simpleActions: Record<string, string> = {
+    [ACTIONS.SEARCH]: 'Call search_tweets("mindfulness OR productivity OR wisdom") NOW.',
+    [ACTIONS.LIKE]: 'Call like_tweet(tweet_id) on an interesting tweet NOW.',
+    [ACTIONS.QUOTE]: 'Call quote_tweet(tweet_id, "your brief insight") NOW.'
+  };
+  
+  wisdom_agent.description = simpleActions[action] || 'Execute your assigned action.';
 }
 
 async function runAgentWithSchedule(retryCount = 0): Promise<void> {
