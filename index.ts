@@ -65,6 +65,15 @@ function handleTwitterError(error: any): void {
       const resetDate = new Date(monthlyCapResetTime * 1000);
       console.log(`🚫 MONTHLY CAP EXCEEDED! No more read operations until: ${resetDate.toISOString()}`);
     }
+    
+    // Handle daily tweet limit
+    if (error.headers?.['x-user-limit-24hour-remaining'] === '0') {
+      const resetTime = parseInt(error.headers['x-user-limit-24hour-reset']);
+      const resetDate = new Date(resetTime * 1000);
+      console.log(`🚫 DAILY TWEET LIMIT (25/day) EXCEEDED! Can post again at: ${resetDate.toISOString()}`);
+      monthlyCapExceeded = true;
+      monthlyCapResetTime = resetTime;
+    }
   }
 }
 
@@ -156,54 +165,45 @@ function getNextAction(): ACTIONS {
 function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): void {
   if (action === ACTIONS.SKIP) return;
   
-  // ULTRA-SIMPLE INSTRUCTIONS FOR DEEPSEEK
+  // ULTRA-SIMPLE INSTRUCTIONS FOR LLAMA
   if (action === ACTIONS.POST_NO_IMAGE) {
-    wisdom_agent.description = `ACTION: Call post_tweet() with wisdom content NOW.
+    wisdom_agent.description = `Execute this function now:
 
-Rules:
-- NO hashtags
-- 1-2 sentences only
-- Direct and practical
+post_tweet("Focus on progress, not perfection.")
 
-Example: post_tweet("Small daily improvements create lasting change.")
-
-Call post_tweet() immediately.`;
+NO planning. NO thinking. Just call post_tweet() with wisdom content.`;
     return;
   }
   
   if (action === ACTIONS.POST) {
-    wisdom_agent.description = `ACTION: Post wisdom with image in 3 steps:
+    wisdom_agent.description = `Execute 3 functions in order:
 
-Step 1: generate_image("architectural watercolor in moody style", 768, 768)
-Step 2: get_latest_image_url()
-Step 3: upload_image_and_tweet("your wisdom content", "image_url_from_step_2")
+1. generate_image("architectural watercolor in moody style", 768, 768)
+2. get_latest_image_url()
+3. upload_image_and_tweet("your wisdom", "url_from_step_2")
 
-Rules: NO hashtags, keep content practical and short
-
-Execute all 3 steps NOW.`;
+Execute NOW.`;
     return;
   }
 
   if (action === ACTIONS.REPLY_TARGETS) {
-    wisdom_agent.description = `ACTION: Reply to a target account in 2 steps:
+    wisdom_agent.description = `Execute 2 functions:
 
-Step 1: find_target_account()
-Step 2: reply_tweet(tweet_id, "your supportive reply")
+1. find_target_account()
+2. reply_tweet(tweet_id, "supportive reply")
 
-Rules: NO hashtags, be authentic, 1-2 sentences
-
-Execute both steps NOW.`;
+Execute NOW.`;
     return;
   }
   
-  // For other actions, keep simple
+  // For other actions
   const simpleActions: Record<string, string> = {
-    [ACTIONS.SEARCH]: 'Call search_tweets("mindfulness OR productivity OR wisdom") NOW.',
-    [ACTIONS.LIKE]: 'Call like_tweet(tweet_id) on an interesting tweet NOW.',
-    [ACTIONS.QUOTE]: 'Call quote_tweet(tweet_id, "your brief insight") NOW.'
+    [ACTIONS.SEARCH]: 'Call search_tweets("wisdom") NOW.',
+    [ACTIONS.LIKE]: 'Call like_tweet(tweet_id) NOW.',
+    [ACTIONS.QUOTE]: 'Call quote_tweet(tweet_id, "insight") NOW.'
   };
   
-  wisdom_agent.description = simpleActions[action] || 'Execute your assigned action.';
+  wisdom_agent.description = simpleActions[action] || 'Execute your action.';
 }
 
 async function runAgentWithSchedule(retryCount = 0): Promise<void> {
@@ -253,7 +253,6 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
             if (stepError.status === 429 || stepError.response?.status === 429) {
               const retryAfter = stepError.response?.headers?.['retry-after'] || 60;
               console.log(`⚠️ Virtuals API rate limit hit. Retry after ${retryAfter}s`);
-              // Schedule this post for later
               setTimeout(() => runAgentWithSchedule(0), retryAfter * 1000);
               return;
             }
@@ -304,7 +303,6 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           } catch (error: any) {
             handleTwitterError(error);
             console.log(`⚠️ Reply failed, not counting toward daily total`);
-            // Don't throw - let scheduler continue
             success = false;
           }
           break;
@@ -323,7 +321,6 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
             if (isReadAction(nextAction)) {
               handleTwitterError(error);
             }
-            // Don't throw - let scheduler continue
             console.log(`⚠️ Action ${nextAction} failed:`, error.message);
             success = false;
           }
@@ -369,7 +366,6 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
       console.log(`📊 Total: ${totalPosts} posts (${imagePosts} with images, ${textPosts} text-only)`);
     }
     
-    // Always check more frequently than the longest interval to catch posts on time
     const checkInterval = Math.min(POST_INTERVAL, REPLY_INTERVAL, OTHER_ACTION_INTERVAL) / 2;
     
     console.log(`Scheduling next cycle check in ${Math.round(checkInterval/1000)} seconds`);
@@ -447,6 +443,20 @@ async function main(): Promise<void> {
       console.log("Initializing agent...");
       await wisdom_agent.init();
       console.log("Agent initialization successful!");
+      
+      // DEBUG: Show available functions
+      console.log("\n=== TWITTER PLUGIN FUNCTIONS ===");
+      const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
+      if (twitterWorker) {
+        console.log("Functions:", JSON.stringify(twitterWorker.functions.map(f => ({
+          name: f.name,
+          description: f.description,
+          args: f.args
+        })), null, 2));
+      } else {
+        console.log("❌ Twitter worker not found!");
+      }
+      console.log("================================\n");
       
       console.log("Initializing reply manager...");
       await replyManager.initialize();
