@@ -92,7 +92,7 @@ REMEMBER: ONE ACTION PER STEP ONLY.`,
         twitterMediaWorker,
         imageUrlHandlerWorker,
     ],
-    llmModel: LLMModel.DeepSeek_R1,
+    llmModel: LLMModel.Llama_3_3_70B_Instruct,
     getAgentState: async () => {
         return {
             lastPostTime: Date.now(),
