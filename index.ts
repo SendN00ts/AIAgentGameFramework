@@ -165,7 +165,6 @@ function getNextAction(): ACTIONS {
 function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): void {
   if (action === ACTIONS.SKIP) return;
   
-  // ULTRA-SIMPLE INSTRUCTIONS FOR LLAMA
   if (action === ACTIONS.POST_NO_IMAGE) {
     wisdom_agent.description = `Execute this function now:
 
@@ -175,10 +174,10 @@ NO planning. NO thinking. Just call post_tweet() with wisdom content.`;
     return;
   }
   
-  if (action === ACTIONS.POST) {
+if (action === ACTIONS.POST) {
     wisdom_agent.description = `Execute 3 functions in order:
 
-1. generate_image("architectural watercolor in moody style", 768, 768)
+1. generate_image("elegant classical architecture watercolor painting, soft brushstrokes, muted earth tones, beige and brown palette, atmospheric perspective, dreamy quality, professional architectural illustration", 768, 768)
 2. get_latest_image_url()
 3. upload_image_and_tweet("your wisdom", "url_from_step_2")
 
