@@ -177,13 +177,13 @@ NO planning. NO thinking. Just call post_tweet() with wisdom content.`;
 if (action === ACTIONS.POST) {
     wisdom_agent.description = `Execute 3 functions in order:
 
-1. generate_image("elegant classical architecture watercolor painting, soft brushstrokes, muted earth tones, beige and brown palette, atmospheric perspective, dreamy quality, professional architectural illustration", 768, 768)
+1. generate_image("interior architecture watercolor, light streaming through arched windows, soft shadows, glimpse of blue sky and greenery outside, atmospheric perspective, muted earth tones with touches of blue and green, dreamy quality, colonnade or archway interior", 768, 768)
 2. get_latest_image_url()
 3. upload_image_and_tweet("your wisdom", "url_from_step_2")
 
 Execute NOW.`;
     return;
-  }
+}
 
   if (action === ACTIONS.REPLY_TARGETS) {
     wisdom_agent.description = `Execute 2 functions:

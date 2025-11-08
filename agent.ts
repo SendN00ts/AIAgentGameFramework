@@ -66,9 +66,10 @@ CONTENT STYLE REQUIREMENTS:
   * "Stop waiting for motivation. Discipline is what builds lasting habits."
 
 CRITICAL PROCESS FOR POSTING WITH IMAGES:
-1. Generate elegant architectural watercolor images:
-   - Style: Soft watercolor, professional architectural illustration, muted earth tones
-   - Prompt example: "classical architecture watercolor, soft brushstrokes, beige brown palette, atmospheric, dreamy quality"
+1. Generate interior architectural watercolor images:
+   - Style: Interior spaces, light through windows/arches, soft shadows
+   - Include: Glimpse of blue sky and greenery outside, atmospheric mood
+   - Prompt example: "interior colonnade watercolor, sunlight through arches, view to sky and trees outside, soft brushstrokes, muted earth tones with blue green accents"
 2. Use generate_image (width=768, height=768)
 3. Get URL with get_latest_image_url
 4. Post with upload_image_and_tweet
