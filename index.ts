@@ -15,6 +15,26 @@ enum ACTIONS {
 
 const IMAGE_POST_PROBABILITY = 0.35;
 
+const INTERIOR_SCENES = [
+  "spiral stone staircase watercolor, sunlight from skylight above, soft shadows on steps, glimpse of blue sky through opening, muted earth tones",
+  "interior window alcove watercolor, large arched window with view to garden, soft light streaming in, window seat, atmospheric perspective",
+  "monastery cloister courtyard watercolor, covered walkway, view to central garden with fountain, soft shadows, peaceful mood",
+  "gothic cathedral interior watercolor, tall stained glass windows with colored light beams, stone columns, ethereal atmosphere",
+  "library interior watercolor, tall windows between bookshelves, soft natural light, glimpse of trees outside, warm tones",
+  "atrium interior watercolor, glass ceiling with botanical shadows, natural light filtering down, elegant columns, serene mood",
+  "vaulted ceiling room watercolor, side windows with garden view, soft indirect light, architectural details, peaceful atmosphere",
+  "arched doorway portal watercolor, view through to sunlit courtyard beyond, contrast of shadow and light, architectural depth",
+  "tower interior watercolor, narrow medieval windows with landscape view, circular stone walls, dramatic light shafts"
+];
+
+let currentSceneIndex = 0;
+
+function getNextInteriorScene(): string {
+  const scene = INTERIOR_SCENES[currentSceneIndex];
+  currentSceneIndex = (currentSceneIndex + 1) % INTERIOR_SCENES.length;
+  return scene;
+}
+
 let lastPostTime = 0;
 let lastReplyTime = 0;
 let dailyReplies = 0;
@@ -175,9 +195,10 @@ NO planning. NO thinking. Just call post_tweet() with wisdom content.`;
   }
   
 if (action === ACTIONS.POST) {
+    const scenePrompt = getNextInteriorScene();
     wisdom_agent.description = `Execute 3 functions in order:
 
-1. generate_image("interior architecture watercolor, light streaming through arched windows, soft shadows, glimpse of blue sky and greenery outside, atmospheric perspective, muted earth tones with touches of blue and green, dreamy quality, colonnade or archway interior", 768, 768)
+1. generate_image("${scenePrompt}", 768, 768)
 2. get_latest_image_url()
 3. upload_image_and_tweet("your wisdom", "url_from_step_2")
 
