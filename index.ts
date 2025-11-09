@@ -186,13 +186,23 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   if (action === ACTIONS.SKIP) return;
   
   if (action === ACTIONS.POST_NO_IMAGE) {
-    wisdom_agent.description = `Execute this function now:
+    wisdom_agent.description = `Call post_tweet() with NEW unique wisdom content.
 
-post_tweet("Focus on progress, not perfection.")
+Create fresh practical advice about:
+- Personal growth, productivity, mindset shifts
+- Goal achievement, habit building, discipline
+- Time management, focus, consistency
 
-NO planning. NO thinking. Just call post_tweet() with wisdom content.`;
+Rules:
+- Must be DIFFERENT from previous tweets
+- 1-2 sentences max
+- Direct and actionable
+- NO hashtags
+- NO quotes from famous people
+
+Call post_tweet("your new wisdom here") NOW.`;
     return;
-  }
+}
   
 if (action === ACTIONS.POST) {
     const scenePrompt = getNextInteriorScene();
@@ -200,21 +210,13 @@ if (action === ACTIONS.POST) {
 
 1. generate_image("${scenePrompt}", 768, 768)
 2. get_latest_image_url()
-3. upload_image_and_tweet("your wisdom", "url_from_step_2")
+3. upload_image_and_tweet("CREATE NEW UNIQUE wisdom content here - different from past tweets", "url_from_step_2")
+
+Make wisdom about productivity, habits, or mindset. Keep it fresh and actionable. NO hashtags.
 
 Execute NOW.`;
     return;
 }
-
-  if (action === ACTIONS.REPLY_TARGETS) {
-    wisdom_agent.description = `Execute 2 functions:
-
-1. find_target_account()
-2. reply_tweet(tweet_id, "supportive reply")
-
-Execute NOW.`;
-    return;
-  }
   
   // For other actions
   const simpleActions: Record<string, string> = {
