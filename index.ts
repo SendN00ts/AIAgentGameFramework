@@ -13,32 +13,61 @@ enum ACTIONS {
   SKIP = 'skip'
 }
 
-const IMAGE_POST_PROBABILITY = 0.35;
+const IMAGE_POST_PROBABILITY = 0.2;
 
-const INTERIOR_SCENES = [
-  "spiral stone staircase watercolor, sunlight from skylight above, soft shadows on steps, glimpse of blue sky through opening, muted earth tones",
-  "interior window alcove watercolor, large arched window with view to garden, soft light streaming in, window seat, atmospheric perspective",
-  "monastery cloister courtyard watercolor, covered walkway, view to central garden with fountain, soft shadows, peaceful mood",
-  "gothic cathedral interior watercolor, tall stained glass windows with colored light beams, stone columns, ethereal atmosphere",
-  "library interior watercolor, tall windows between bookshelves, soft natural light, glimpse of trees outside, warm tones",
-  "atrium interior watercolor, glass ceiling with botanical shadows, natural light filtering down, elegant columns, serene mood",
-  "vaulted ceiling room watercolor, side windows with garden view, soft indirect light, architectural details, peaceful atmosphere",
-  "arched doorway portal watercolor, view through to sunlit courtyard beyond, contrast of shadow and light, architectural depth",
-  "tower interior watercolor, narrow medieval windows with landscape view, circular stone walls, dramatic light shafts"
+const IMAGE_STYLE_GUIDELINES = `
+STYLE: Soft watercolor, muted earth tones, atmospheric natural lighting
+
+CREATE A UNIQUE SCENE - choose your own subject using these principles:
+
+COMPOSITION OPTIONS (pick one):
+- Interior architectural space with light and nature visible
+- Single meaningful object in contemplative setting
+- Small arrangement of items with symbolic meaning
+
+REQUIREMENTS:
+- Soft watercolor technique with gentle edges
+- Natural light source (sunlight, window light, soft glow)
+- Muted palette: earth tones, subtle blues/greens
+- Contemplative, peaceful mood
+- Touch of nature or life (sky, plants, or organic elements)
+
+AVOID:
+- Exterior building facades
+- Modern/industrial settings
+- Busy or cluttered compositions
+- Bright artificial colors
+- Literal repetition of past images
+
+Be inventive. Every image must be distinctly different.
+`;
+
+// Wisdom topic rotation
+const WISDOM_TOPICS = [
+  "starting new habits and overcoming procrastination",
+  "dealing with failure and building resilience", 
+  "time management and prioritization",
+  "maintaining focus in distractions",
+  "setting boundaries and saying no",
+  "consistency vs perfection mindset",
+  "learning from mistakes and iteration",
+  "building discipline when motivation fades",
+  "breaking big goals into small steps",
+  "managing energy not just time"
 ];
 
-let currentSceneIndex = 0;
+let currentTopicIndex = 0;
 
-function getNextInteriorScene(): string {
-  const scene = INTERIOR_SCENES[currentSceneIndex];
-  currentSceneIndex = (currentSceneIndex + 1) % INTERIOR_SCENES.length;
-  return scene;
+function getNextWisdomTopic(): string {
+  const topic = WISDOM_TOPICS[currentTopicIndex];
+  currentTopicIndex = (currentTopicIndex + 1) % WISDOM_TOPICS.length;
+  return topic;
 }
 
 let lastPostTime = 0;
 let lastReplyTime = 0;
 let dailyReplies = 0;
-const REPLIES_PER_DAY_TARGET = 50;
+const REPLIES_PER_DAY_TARGET = 8; // Realistic: 15 posts + 8 replies = 23/day
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 2;
@@ -53,8 +82,8 @@ let dailyReadAttempts = 0;
 let lastResetDate = '';
 const maxDailyReadAttempts = 20;
 
-const POST_INTERVAL = 96 * 60 * 1000; // ~5 posts per day (every 4.8 hours)
-const REPLY_INTERVAL = 29 * 60 * 1000; // ~50 replies per day (every 29 minutes)
+const POST_INTERVAL = 96 * 60 * 1000; // 15 posts per day (every 96 minutes)
+const REPLY_INTERVAL = 180 * 60 * 1000; // 8 replies per day (every 180 minutes)
 const OTHER_ACTION_INTERVAL = 60 * 60 * 1000; // 1 hour for other actions
 
 let currentActionIndex = 0;
@@ -186,37 +215,51 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   if (action === ACTIONS.SKIP) return;
   
   if (action === ACTIONS.POST_NO_IMAGE) {
-    wisdom_agent.description = `Call post_tweet() with NEW unique wisdom content.
+    const topic = getNextWisdomTopic();
+    const timestamp = Date.now();
+    wisdom_agent.description = `Call post_tweet() with BRAND NEW wisdom about: "${topic}"
 
-Create fresh practical advice about:
-- Personal growth, productivity, mindset shifts
-- Goal achievement, habit building, discipline
-- Time management, focus, consistency
+CRITICAL: Generate completely ORIGINAL content - timestamp ${timestamp}
 
-Rules:
-- Must be DIFFERENT from previous tweets
-- 1-2 sentences max
-- Direct and actionable
-- NO hashtags
-- NO quotes from famous people
+Requirements:
+- Must be about: ${topic}
+- Must be DIFFERENT from ALL previous tweets
+- 1-2 sentences, direct and practical
+- NO hashtags, NO famous quotes
 
-Call post_tweet("your new wisdom here") NOW.`;
+FORBIDDEN phrases (do NOT use):
+- "Focus on progress, not perfection"
+- "Small daily improvements"
+- "The best time to start"
+- "Your thoughts create your reality"
+- "Stop waiting for motivation"
+- "Discipline is the bridge"
+
+Create NEW unique wisdom NOW: post_tweet("your original wisdom here")`;
     return;
-}
+  }
   
-if (action === ACTIONS.POST) {
-    const scenePrompt = getNextInteriorScene();
-    wisdom_agent.description = `Execute 3 functions in order:
+  if (action === ACTIONS.POST) {
+    const topic = getNextWisdomTopic();
+    const timestamp = Date.now();
+    wisdom_agent.description = `Execute 3 functions:
 
-1. generate_image("${scenePrompt}", 768, 768)
+1. CREATE UNIQUE IMAGE PROMPT following these guidelines:
+${IMAGE_STYLE_GUIDELINES}
+Generate something NEW - timestamp ${timestamp}
+
+Then call: generate_image("your_creative_scene_description", 768, 768)
+
 2. get_latest_image_url()
-3. upload_image_and_tweet("CREATE NEW UNIQUE wisdom content here - different from past tweets", "url_from_step_2")
 
-Make wisdom about productivity, habits, or mindset. Keep it fresh and actionable. NO hashtags.
+3. upload_image_and_tweet("ORIGINAL wisdom about ${topic} - timestamp ${timestamp}", "url")
+
+Topic: ${topic}
+Make wisdom FRESH and different from past tweets. NO hashtags.
 
 Execute NOW.`;
     return;
-}
+  }
   
   // For other actions
   const simpleActions: Record<string, string> = {
@@ -421,7 +464,7 @@ Rate Limit Status:
 - Reset Time: ${monthlyCapResetTime ? new Date(monthlyCapResetTime * 1000).toISOString() : 'N/A'}
 
 Bot Stats:
-- Total Posts: ${totalPosts} (target: 5/day)
+- Total Posts: ${totalPosts} (target: 15/day)
 - Image Posts: ${imagePosts} (${imagePostPercentage.toFixed(1)}%)
 - Text Posts: ${textPosts} (${(100 - imagePostPercentage).toFixed(1)}%)
 - Target Image %: ${IMAGE_POST_PROBABILITY * 100}%
@@ -440,7 +483,7 @@ process.on('unhandledRejection', (reason, promise) => {
 setInterval(() => {
   const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
   console.log('Heartbeat check:', new Date().toISOString());
-  console.log(`📊 Stats: ${totalPosts} posts (target: 5/day), ${dailyReplies}/${REPLIES_PER_DAY_TARGET} replies`);
+  console.log(`📊 Stats: ${totalPosts} posts (target: 15/day), ${dailyReplies}/${REPLIES_PER_DAY_TARGET} replies`);
   console.log(`📊 Image percentage: ${imagePostPercentage.toFixed(1)}% (target: ${IMAGE_POST_PROBABILITY * 100}%)`);
 }, 60000);
 
@@ -454,8 +497,8 @@ async function main(): Promise<void> {
     console.log("API_KEY present:", !!process.env.API_KEY);
     console.log("TWITTER_API_KEY present:", !!process.env.TWITTER_API_KEY);
     console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
-    console.log(`🎯 Posts: 5/day (every ${POST_INTERVAL/60000} minutes)`);
-    console.log(`📨 Replies: ~50/day (every ${REPLY_INTERVAL/60000} minutes)`);
+    console.log(`🎯 Posts: 15/day (every ${POST_INTERVAL/60000} minutes)`);
+    console.log(`📨 Replies: ${REPLIES_PER_DAY_TARGET}/day (every ${REPLY_INTERVAL/60000} minutes)`);
     console.log(`🎯 IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}%`);
     
     const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
