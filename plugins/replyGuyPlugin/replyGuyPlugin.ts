@@ -34,30 +34,43 @@ export function createReplyGuyWorker(
     accessSecret: accessSecret,
   });
 
-  function loadTargetAccounts(): TargetCategories {
-    try {
-      const possiblePaths = [
-        path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json'),
-        path.resolve(process.cwd(), 'plugins/target_accounts.json'),
-        path.resolve(process.cwd(), 'target_accounts.json'),
-        path.resolve(__dirname, 'target_accounts.json')
-      ];
-      
-      for (const filePath of possiblePaths) {
-        if (fs.existsSync(filePath)) {
-          console.log(`Found target accounts at: ${filePath}`);
-          const fileContent = fs.readFileSync(filePath, 'utf8');
-          return JSON.parse(fileContent);
+function loadTargetAccounts(): string[] {
+  try {
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json'),
+      path.resolve(process.cwd(), 'plugins/target_accounts.json'),
+      path.resolve(process.cwd(), 'target_accounts.json'),
+      path.resolve(__dirname, 'target_accounts.json')
+    ];
+
+    for (const filePath of possiblePaths) {
+      if (fs.existsSync(filePath)) {
+        console.log(`Found target accounts at: ${filePath}`);
+        const fileContent = fs.readFileSync(filePath, 'utf8');
+        const parsed: TargetCategories = JSON.parse(fileContent);
+
+        const allHandles: string[] = [];
+
+        for (const category of Object.keys(parsed)) {
+          const accounts = parsed[category];
+          for (const acc of accounts) {
+            if (acc.handle) {
+              allHandles.push(acc.handle);
+            }
+          }
         }
+
+        return allHandles;
       }
-      
-      console.error('Could not find target_accounts.json in any expected location');
-      return {};
-    } catch (error) {
-      console.error('Error loading target accounts:', error);
-      return {};
     }
+
+    console.error('Could not find target_accounts.json');
+    return [];
+  } catch (error) {
+    console.error('Error loading target accounts:', error);
+    return [];
   }
+}
 
   function containsHashtags(text?: string): boolean {
     return Boolean(text && text.includes('#'));
@@ -90,6 +103,8 @@ export function createReplyGuyWorker(
     }
   }
 
+  // End of loadTargetAccounts and helpers
+  
   const findTargetAccount = new GameFunction({
     name: "find_target_account",
     description: "Find a target wellness account and their latest tweet to reply to",
@@ -99,62 +114,69 @@ export function createReplyGuyWorker(
     executable: async (args: {category?: string}, logger?: ((msg: string) => void) | null) => {
       try {
         const { category = "random" } = args;
-        
-        const allTargetAccounts = loadTargetAccounts();
-        
-        if (Object.keys(allTargetAccounts).length === 0) {
+
+        // Load all accounts, but we want the parsed TargetCategories, not just handles
+        const possiblePaths = [
+          path.resolve(process.cwd(), 'plugins/replyGuyPlugin/target_accounts.json'),
+          path.resolve(process.cwd(), 'plugins/target_accounts.json'),
+          path.resolve(process.cwd(), 'target_accounts.json'),
+          path.resolve(__dirname, 'target_accounts.json')
+        ];
+        let parsed: TargetCategories | null = null;
+        for (const filePath of possiblePaths) {
+          if (fs.existsSync(filePath)) {
+            const fileContent = fs.readFileSync(filePath, 'utf8');
+            parsed = JSON.parse(fileContent);
+            break;
+          }
+        }
+        if (!parsed) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
             "No target accounts found. Please check the target_accounts.json file."
           );
         }
-        
+
         let targetCategory: string;
         if (category === "random") {
-          const categories = Object.keys(allTargetAccounts);
+          const categories = Object.keys(parsed);
           targetCategory = categories[Math.floor(Math.random() * categories.length)];
-        } else if (allTargetAccounts[category]) {
+        } else if (parsed[category]) {
           targetCategory = category;
         } else {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            `Category '${category}' not found. Available categories: ${Object.keys(allTargetAccounts).join(', ')}`
+            `Category '${category}' not found. Available categories: ${Object.keys(parsed).join(', ')}`
           );
         }
-        
-        const accounts = allTargetAccounts[targetCategory];
+
+        const accounts = parsed[targetCategory];
         const randomAccount = accounts[Math.floor(Math.random() * accounts.length)];
-        
+
         if (logger) logger(`Selected account: ${randomAccount.handle} from category: ${targetCategory}`);
         console.log(`🎯 Selected target account: ${randomAccount.handle} (${targetCategory})`);
-        
+
         const username = randomAccount.handle.replace('@', '');
-        
         try {
           const userId = await getUserId(username);
-          
           if (!userId) {
             return new ExecutableGameFunctionResponse(
               ExecutableGameFunctionStatus.Failed,
               `Could not find Twitter user with username: ${username}`
             );
           }
-          
           // OPTIMIZATION: Get only 1 tweet instead of 5
           const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
             max_results: 1,
             "tweet.fields": ["created_at", "text"]
           });
-          
           if (!tweetsResponse.data || tweetsResponse.data.data.length === 0) {
             return new ExecutableGameFunctionResponse(
               ExecutableGameFunctionStatus.Failed,
               `No tweets found for user: ${username}`
             );
           }
-          
           const latestTweet = tweetsResponse.data.data[0];
-          
           if (!latestTweet.created_at) {
             console.log(`No valid date for tweet from ${username}`);
             return new ExecutableGameFunctionResponse(
@@ -170,7 +192,6 @@ export function createReplyGuyWorker(
               })
             );
           }
-          
           let tweetDate: Date;
           try {
             tweetDate = new Date(latestTweet.created_at);
@@ -179,10 +200,8 @@ export function createReplyGuyWorker(
             console.log(`Invalid date format for tweet from ${username}`);
             tweetDate = new Date();
           }
-          
           const threeMonthsAgo = new Date();
           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-          
           if (tweetDate < threeMonthsAgo) {
             console.log(`Skipping inactive account ${username} - last tweet from ${tweetDate.toISOString()}`);
             return new ExecutableGameFunctionResponse(
@@ -190,7 +209,6 @@ export function createReplyGuyWorker(
               `Account ${username} hasn't tweeted recently (last tweet: ${tweetDate.toDateString()})`
             );
           }
-          
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Done,
             JSON.stringify({
@@ -203,7 +221,6 @@ export function createReplyGuyWorker(
               tweet_created_at: latestTweet.created_at
             })
           );
-          
         } catch (error: any) {
           console.error('Error fetching tweets:', error);
           return new ExecutableGameFunctionResponse(
@@ -220,7 +237,7 @@ export function createReplyGuyWorker(
       }
     }
   });
-  
+
   const replyTweet = new GameFunction({
     name: "reply_tweet",
     description: "Reply to a specific tweet with personalized content",
@@ -338,6 +355,8 @@ export function createReplyGuyWorker(
       }
     }
   });
+
+  
 
   return new GameWorker({
     id: "reply_guy_worker",

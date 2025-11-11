@@ -72,7 +72,7 @@ function getNextWisdomTopic(): string {
 let lastPostTime = 0;
 let lastReplyTime = 0;
 let dailyReplies = 0;
-const REPLIES_PER_DAY_TARGET = 8; // Realistic: 15 posts + 8 replies = 23/day
+const REPLIES_PER_DAY_TARGET = 90;
 let functionCalledThisCycle = false;
 let imageRetryCount = 0;
 const MAX_IMAGE_RETRIES = 2;
@@ -85,10 +85,10 @@ let monthlyCapExceeded = false;
 let monthlyCapResetTime = 0;
 let dailyReadAttempts = 0;
 let lastResetDate = '';
-const maxDailyReadAttempts = 20;
+const maxDailyReadAttempts = 300;
 
-const POST_INTERVAL = 96 * 60 * 1000; // 15 posts per day (every 96 minutes)
-const REPLY_INTERVAL = 180 * 60 * 1000; // 8 replies per day (every 180 minutes)
+const POST_INTERVAL = 288 * 60 * 1000;  
+const REPLY_INTERVAL = 16 * 60 * 1000;
 const OTHER_ACTION_INTERVAL = 60 * 60 * 1000; // 1 hour for other actions
 
 let currentActionIndex = 0;
