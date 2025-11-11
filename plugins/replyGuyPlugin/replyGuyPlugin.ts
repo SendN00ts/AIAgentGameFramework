@@ -132,6 +132,15 @@ export function createReplyGuyWorker(
         console.log(`🎯 Selected target account: ${randomAccount.handle}`);
 
         const username = randomAccount.handle.replace('@', '');
+
+        // Validate username length
+        if (username.length > 15) {
+          console.log(`⚠️ Username too long: ${username} (${username.length} chars)`);
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            `Username exceeds 15 character limit: ${username}`
+          );
+        }
         
         try {
           const userId = await getUserId(username);
@@ -160,8 +169,8 @@ export function createReplyGuyWorker(
           // Cache tweets 2-5
           for (let i = 1; i < tweets.length; i++) {
             tweetCache.push({
-              userId,
-              username,
+              userId: userId,
+              username: username,
               handle: randomAccount.handle,
               description: randomAccount.description || "Wellness and mindfulness account",
               category: "all",
