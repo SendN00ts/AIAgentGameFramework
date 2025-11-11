@@ -526,7 +526,6 @@ async function main(): Promise<void> {
       await wisdom_agent.init();
       console.log("Agent initialization successful!");
       
-      // DEBUG: Show available functions
       console.log("\n=== TWITTER PLUGIN FUNCTIONS ===");
       const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
       if (twitterWorker) {
