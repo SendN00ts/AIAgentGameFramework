@@ -89,7 +89,7 @@ const maxDailyReadAttempts = 300;
 
 const POST_INTERVAL = 288 * 60 * 1000;  
 const REPLY_INTERVAL = 16 * 60 * 1000;
-const OTHER_ACTION_INTERVAL = 60 * 60 * 1000; // 1 hour for other actions
+const OTHER_ACTION_INTERVAL = 60 * 60 * 1000;
 
 let currentActionIndex = 0;
 const READ_ACTIONS = [ACTIONS.SEARCH, ACTIONS.LIKE, ACTIONS.QUOTE];
