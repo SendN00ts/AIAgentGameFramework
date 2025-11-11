@@ -103,8 +103,6 @@ function loadTargetAccounts(): string[] {
     }
   }
 
-  // End of loadTargetAccounts and helpers
-  
   const findTargetAccount = new GameFunction({
     name: "find_target_account",
     description: "Find a target wellness account and their latest tweet to reply to",
