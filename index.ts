@@ -13,7 +13,12 @@ enum ACTIONS {
   SKIP = 'skip'
 }
 
-const IMAGE_POST_PROBABILITY = 0.2;
+const IMAGE_POST_PROBABILITY = 0.4;
+
+const POSTS_PER_CYCLE = 5;
+const IMAGES_PER_CYCLE = 2;
+let postsInCurrentCycle = 0;
+let imagesInCurrentCycle = 0;
 
 const IMAGE_STYLE_GUIDELINES = `
 STYLE: Soft watercolor, muted earth tones, atmospheric natural lighting
@@ -173,24 +178,36 @@ function getNextAction(): ACTIONS {
   
   // Priority 1: Post if it's time (POSTS DON'T NEED READS - always allowed)
   if (timeSinceLastPost >= POST_INTERVAL) {
-    console.log("Time for a new post!");
+  console.log("Time for a new post!");
+  
+  // Reset cycle counter
+  if (postsInCurrentCycle >= POSTS_PER_CYCLE) {
+    postsInCurrentCycle = 0;
+    imagesInCurrentCycle = 0;
+    console.log("📊 New cycle started");
+  }
+  
+  // Decide: image or text
+  let useImage = false;
+  if (imagesInCurrentCycle < IMAGES_PER_CYCLE) {
+    // Still have image quota left - decide randomly within remaining posts
+    const postsRemaining = POSTS_PER_CYCLE - postsInCurrentCycle;
+    const imagesRemaining = IMAGES_PER_CYCLE - imagesInCurrentCycle;
+    const chanceOfImage = imagesRemaining / postsRemaining;
     
-    const randomValue = Math.random();
-    console.log(`Random value: ${randomValue.toFixed(3)}, Image threshold: ${IMAGE_POST_PROBABILITY}`);
-    
-    if (randomValue <= IMAGE_POST_PROBABILITY) {
-      if (imageRetryCount < MAX_IMAGE_RETRIES) {
-        console.log(`✅ Selected POST WITH image (${(randomValue * 100).toFixed(1)}% <= ${IMAGE_POST_PROBABILITY * 100}%)`);
-        return ACTIONS.POST;
-      } else {
-        console.log(`⚠️ Max retries reached. Forcing text-only.`);
-        imageRetryCount = 0;
-        return ACTIONS.POST_NO_IMAGE;
-      }
-    } else {
-      console.log(`✅ Selected POST WITHOUT image (${(randomValue * 100).toFixed(1)}% > ${IMAGE_POST_PROBABILITY * 100}%)`);
-      return ACTIONS.POST_NO_IMAGE;
-    }
+    useImage = Math.random() <= chanceOfImage;
+  }
+  
+  postsInCurrentCycle++;
+  
+  if (useImage && imageRetryCount < MAX_IMAGE_RETRIES) {
+    imagesInCurrentCycle++;
+    console.log(`✅ POST WITH image (${imagesInCurrentCycle}/${IMAGES_PER_CYCLE} in cycle)`);
+    return ACTIONS.POST;
+  } else {
+    console.log(`✅ POST WITHOUT image (${postsInCurrentCycle - imagesInCurrentCycle}/${POSTS_PER_CYCLE - IMAGES_PER_CYCLE} text posts in cycle)`);
+    return ACTIONS.POST_NO_IMAGE;
+  }
   }
   
   // Priority 2: Reply if time + under daily goal + rate limit allows
