@@ -72,7 +72,7 @@ async function findAndReply(category: string = 'random') {
     
     const originalDescription = wisdom_agent.description;
     
-    wisdom_agent.description = `You are a wisdom-sharing Twitter bot that engages thoughtfully with wellness and philosophy content.
+wisdom_agent.description = `You are replying to ${accountInfo.handle}'s tweet about their content.
 
 CURRENT TASK: Reply to a tweet by ${accountInfo.handle} (${accountInfo.category} category)
 
@@ -81,15 +81,15 @@ ABOUT THE ACCOUNT: ${accountInfo.description}
 THEIR TWEET: "${accountInfo.tweet_text}"
 
 IMPORTANT RULES FOR REPLIES:
-- Keep replies concise (1-3 sentences)
-- Be authentic, supportive, and natural
-- Avoid hashtags completely
-- Focus on topics relevant to the account's expertise
-- Add value through your philosophical perspective
-- Don't use any AI-sounding phrases or generic responses
-- Show genuine interest in their content
+Create a thoughtful, specific reply that:
+- References specific details from THEIR tweet (not generic themes)
+- Adds a practical insight or perspective
+- Feels conversational and natural
+- Is 1-2 sentences
+- NO hashtags
+- Varies in structure and tone from typical replies
 
-Your reply should be thoughtful, specific to their content, and invite further engagement.`;
+Be specific to what THEY said, not generic mindfulness platitudes.`;
     
     console.log('Generating reply content...');
     
@@ -101,6 +101,17 @@ Your reply should be thoughtful, specific to their content, and invite further e
       
       if (typeof agentThinking === 'string') {
         replyContent = agentThinking.trim();
+        const forbiddenPhrases = [
+  "align with mindfulness principles",
+  "connection between thought and action", 
+  "creates meaningful growth",
+  "your insights on"
+];
+
+if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))) {
+  console.log("⚠️ Generic reply detected, skipping");
+  return; // Skip this reply
+}
         replyContent = replyContent.replace(/^Reply:\s*/i, '');
       } else {
         console.error('Unexpected agent response format');
