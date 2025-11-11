@@ -13,10 +13,10 @@ enum ACTIONS {
   SKIP = 'skip'
 }
 
-const IMAGE_POST_PROBABILITY = 0.4;
+const IMAGE_POST_PROBABILITY = 0.2;
 
 const POSTS_PER_CYCLE = 5;
-const IMAGES_PER_CYCLE = 2;
+const IMAGES_PER_CYCLE = 1;
 let postsInCurrentCycle = 0;
 let imagesInCurrentCycle = 0;
 
