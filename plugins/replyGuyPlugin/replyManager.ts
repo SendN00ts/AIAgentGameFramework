@@ -72,13 +72,21 @@ async function findAndReply(category: string = 'random') {
     
     const originalDescription = wisdom_agent.description;
     
-wisdom_agent.description = `You are replying to ${accountInfo.handle}'s tweet about their content.
+wisdom_agent.description = `You are replying to ${accountInfo.handle}'s tweet.
 
 CURRENT TASK: Reply to a tweet by ${accountInfo.handle} (${accountInfo.category} category)
 
 ABOUT THE ACCOUNT: ${accountInfo.description}
 
 THEIR TWEET: "${accountInfo.tweet_text}"
+
+YOUR TASK: Write ONLY the reply text. Do NOT write function names or commands.
+
+Example of CORRECT output:
+"That's a great point about meditation. Have you tried breath-focused techniques?"
+
+Example of WRONG output:
+"call_function" or "reply_tweet(...)" 
 
 Write a direct reply (just the text, no function calls):
 Create a thoughtful, specific reply that:
@@ -89,7 +97,8 @@ Create a thoughtful, specific reply that:
 - NO hashtags
 - Varies in structure and tone from typical replies
 
-Reply text only (not "call_function" or commands)
+Write your reply now (text only)
+
 Be specific to what THEY said, not generic mindfulness platitudes.`;
     
     console.log('Generating reply content...');
