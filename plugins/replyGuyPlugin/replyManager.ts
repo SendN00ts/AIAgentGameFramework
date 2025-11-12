@@ -102,18 +102,20 @@ Be specific to what THEY said, not generic mindfulness platitudes.`;
       
       if (typeof agentThinking === 'string') {
         replyContent = agentThinking.trim();
-    const forbiddenPhrases = [
+const forbiddenPhrases = [
   "align with mindfulness principles",
   "connection between thought and action",
   "creates meaningful growth",
   "your insights on",
   "stellar piece",
-  "powerful reminder"
+  "powerful reminder",
+  "beautifully articulated",
+  "resonates deeply"
 ];
 
 if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))) {
   console.log("⚠️ Generic reply detected, skipping");
-  return; // Skip this reply
+  return;
 }
         replyContent = replyContent.replace(/^Reply:\s*/i, '');
       } else {
@@ -122,11 +124,10 @@ if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))
       }
 
       if (replyContent === "go_to" || replyContent === "wait" || replyContent.length < 10) {
-        console.log("Invalid reply content detected, generating fallback response");
-        const accountType = accountInfo.category || "wellness";
-        replyContent = `Your insights on ${accountInfo.tweet_text.substring(0, 30)}... align with mindfulness principles. The connection between thought and action creates meaningful growth.`;
-      }
-      
+  console.log("⚠️ Invalid reply content, skipping");
+  return;
+}
+
       const replyResult = await replyGuyWorker.functions
         .find(f => f.name === 'reply_tweet')
         ?.executable({ 

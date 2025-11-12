@@ -333,11 +333,11 @@ Execute NOW.`;
   }
   
   const simpleActions: Record<string, string> = {
-    [ACTIONS.SEARCH]: 'Call search_tweets("wisdom") NOW.',
-    [ACTIONS.LIKE]: 'Call like_tweet(tweet_id) NOW.',
-    [ACTIONS.QUOTE]: 'Call quote_tweet(tweet_id, "insight") NOW.'
-  };
-  
+  [ACTIONS.SEARCH]: 'ONLY call search_tweets("wisdom") NOW. DO NOT generate images. DO NOT post tweets.',
+  [ACTIONS.LIKE]: 'ONLY call like_tweet(tweet_id) NOW. DO NOT generate images.',
+  [ACTIONS.QUOTE]: 'ONLY call quote_tweet(tweet_id, "insight") NOW. DO NOT generate images.'
+};
+
   wisdom_agent.description = simpleActions[action] || 'Execute your action.';
 }
 
