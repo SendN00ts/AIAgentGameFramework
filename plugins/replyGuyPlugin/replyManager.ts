@@ -72,34 +72,9 @@ async function findAndReply(category: string = 'random') {
     
     const originalDescription = wisdom_agent.description;
     
-wisdom_agent.description = `You are replying to ${accountInfo.handle}'s tweet.
+    wisdom_agent.description = `Reply to: "${accountInfo.tweet_text}"
 
-CURRENT TASK: Reply to a tweet by ${accountInfo.handle} (${accountInfo.category} category)
-
-ABOUT THE ACCOUNT: ${accountInfo.description}
-
-THEIR TWEET: "${accountInfo.tweet_text}"
-
-YOUR TASK: Write ONLY the reply text. Do NOT write function names or commands.
-
-Example of CORRECT output:
-"That's a great point about meditation. Have you tried breath-focused techniques?"
-
-Example of WRONG output:
-"call_function" or "reply_tweet(...)" 
-
-Write a direct reply (just the text, no function calls):
-Create a thoughtful, specific reply that:
-- References specific details from THEIR tweet (not generic themes)
-- Adds a practical insight or perspective
-- Feels conversational and natural
-- Is 1-2 sentences
-- NO hashtags
-- Varies in structure and tone from typical replies
-
-Write your reply now (text only)
-
-Be specific to what THEY said, not generic mindfulness platitudes.`;
+Output ONLY your reply text (no commands, no function names):`;
     
     console.log('Generating reply content...');
     
@@ -111,31 +86,42 @@ Be specific to what THEY said, not generic mindfulness platitudes.`;
       
       if (typeof agentThinking === 'string') {
         replyContent = agentThinking.trim();
-const forbiddenPhrases = [
-  "align with mindfulness principles",
-  "connection between thought and action",
-  "creates meaningful growth",
-  "your insights on",
-  "stellar piece",
-  "powerful reminder",
-  "beautifully articulated",
-  "resonates deeply"
-];
-
-if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))) {
-  console.log("⚠️ Generic reply detected, skipping");
-  return;
-}
         replyContent = replyContent.replace(/^Reply:\s*/i, '');
       } else {
         console.error('Unexpected agent response format');
+        wisdom_agent.description = originalDescription;
         return;
       }
 
-      if (replyContent === "go_to" || replyContent === "wait" || replyContent.length < 10) {
-  console.log("⚠️ Invalid reply content, skipping");
-  return;
-}
+      // Check for invalid responses first
+      if (replyContent === "go_to" || 
+          replyContent === "wait" || 
+          replyContent === "call_function" ||
+          replyContent.length < 10 ||
+          replyContent.includes('reply_tweet(') ||
+          replyContent.includes('find_target_account(')) {
+        console.log("⚠️ Invalid reply content, skipping:", replyContent);
+        wisdom_agent.description = originalDescription;
+        return;
+      }
+
+      // Check for generic phrases
+      const forbiddenPhrases = [
+        "align with mindfulness principles",
+        "connection between thought and action",
+        "creates meaningful growth",
+        "your insights on",
+        "stellar piece",
+        "powerful reminder",
+        "beautifully articulated",
+        "resonates deeply"
+      ];
+
+      if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))) {
+        console.log("⚠️ Generic reply detected, skipping:", replyContent);
+        wisdom_agent.description = originalDescription;
+        return;
+      }
 
       const replyResult = await replyGuyWorker.functions
         .find(f => f.name === 'reply_tweet')
@@ -146,6 +132,7 @@ if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))
       
       if (!replyResult || replyResult.status !== 'done') {
         console.error('Failed to post reply:', replyResult?.feedback || 'Unknown error');
+        wisdom_agent.description = originalDescription;
         return;
       }
       
