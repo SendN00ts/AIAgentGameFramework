@@ -80,7 +80,7 @@ ABOUT THE ACCOUNT: ${accountInfo.description}
 
 THEIR TWEET: "${accountInfo.tweet_text}"
 
-IMPORTANT RULES FOR REPLIES:
+Write a direct reply (just the text, no function calls):
 Create a thoughtful, specific reply that:
 - References specific details from THEIR tweet (not generic themes)
 - Adds a practical insight or perspective
@@ -89,6 +89,7 @@ Create a thoughtful, specific reply that:
 - NO hashtags
 - Varies in structure and tone from typical replies
 
+Reply text only (not "call_function" or commands)
 Be specific to what THEY said, not generic mindfulness platitudes.`;
     
     console.log('Generating reply content...');

@@ -58,7 +58,8 @@ const WISDOM_TOPICS = [
   "learning from mistakes and iteration",
   "building discipline when motivation fades",
   "breaking big goals into small steps",
-  "managing energy not just time"
+  "managing energy not just time",
+  "Philosopher quotes"
 ];
 
 let currentTopicIndex = 0;
@@ -242,7 +243,7 @@ Requirements:
 - Must be about: ${topic}
 - Must be DIFFERENT from ALL previous tweets
 - 1-2 sentences, direct and practical
-- NO hashtags, NO famous quotes
+- NO hashtags,
 
 FORBIDDEN phrases (do NOT use):
 - "Focus on progress, not perfection"
