@@ -6,7 +6,7 @@ import * as path from 'path';
 
 dotenv.config();
 
-const REPLY_FILE_PATH = path.resolve(process.cwd(), 'data/replied_tweets.json');
+const REPLY_FILE_PATH = '/app/data/replied_tweets.json';
 
 let repliedTweets: Record<string, number> = {};
 
@@ -102,11 +102,13 @@ Be specific to what THEY said, not generic mindfulness platitudes.`;
       
       if (typeof agentThinking === 'string') {
         replyContent = agentThinking.trim();
-        const forbiddenPhrases = [
+    const forbiddenPhrases = [
   "align with mindfulness principles",
-  "connection between thought and action", 
+  "connection between thought and action",
   "creates meaningful growth",
-  "your insights on"
+  "your insights on",
+  "stellar piece",
+  "powerful reminder"
 ];
 
 if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))) {

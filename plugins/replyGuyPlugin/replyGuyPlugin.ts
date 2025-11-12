@@ -165,22 +165,66 @@ export function createReplyGuyWorker(
           }
           
           const tweets = tweetsResponse.data.data;
+          const threeMonthsAgo = new Date();
+          threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
           
-          // Cache tweets 2-5
-          for (let i = 1; i < tweets.length; i++) {
-            tweetCache.push({
-              userId: userId,
-              username: username,
-              handle: randomAccount.handle,
-              description: randomAccount.description || "Wellness and mindfulness account",
-              category: "all",
-              tweet: tweets[i]
-            });
+          // Validate first tweet age
+          const latestTweet = tweets[0];
+          
+          if (latestTweet.created_at) {
+            try {
+              const tweetDate = new Date(latestTweet.created_at);
+              if (isNaN(tweetDate.getTime())) throw new Error("Invalid date");
+              
+              if (tweetDate < threeMonthsAgo) {
+                console.log(`⏭️ Skipping inactive account ${username} - last tweet from ${tweetDate.toISOString()}`);
+                return new ExecutableGameFunctionResponse(
+                  ExecutableGameFunctionStatus.Failed,
+                  `Account ${username} hasn't tweeted recently (last tweet: ${tweetDate.toDateString()})`
+                );
+              }
+            } catch (e) {
+              console.log(`⚠️ Invalid date for latest tweet from ${username}`);
+            }
           }
           
-          console.log(`💾 Cached ${tweets.length - 1} tweets (${tweetCache.length} total)`);
+          // Cache tweets 2-5 with age validation
+          let cachedCount = 0;
+          for (let i = 1; i < tweets.length; i++) {
+            if (tweets[i].created_at) {
+              try {
+                const tweetDate = new Date(tweets[i].created_at!);
+                 if (!isNaN(tweetDate.getTime()) && tweetDate >= threeMonthsAgo) {
+                  tweetCache.push({
+                    userId: userId,
+                    username: username,
+                    handle: randomAccount.handle,
+                    description: randomAccount.description || "Wellness and mindfulness account",
+                    category: "all",
+                    tweet: tweets[i]
+                  });
+                  cachedCount++;
+                } else {
+                  console.log(`⏭️ Skipping old tweet from ${username}: ${tweetDate.toISOString()}`);
+                }
+              } catch (e) {
+                console.log(`⚠️ Invalid date for tweet from ${username}, skipping cache`);
+              }
+            } else {
+              // Cache tweets without dates (assume they're recent if we got them)
+              tweetCache.push({
+                userId: userId,
+                username: username,
+                handle: randomAccount.handle,
+                description: randomAccount.description || "Wellness and mindfulness account",
+                category: "all",
+                tweet: tweets[i]
+              });
+              cachedCount++;
+            }
+          }
           
-          const latestTweet = tweets[0];
+          console.log(`💾 Cached ${cachedCount} recent tweets (${tweetCache.length} total in cache)`);
           
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Done,
