@@ -1,5 +1,5 @@
-import { wisdom_agent } from '../../agent';
 import { createReplyGuyWorker } from './replyGuyPlugin';
+import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -9,6 +9,10 @@ dotenv.config();
 const REPLY_FILE_PATH = '/app/data/replied_tweets.json';
 
 let repliedTweets: Record<string, number> = {};
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!
+});
 
 const replyGuyWorker = createReplyGuyWorker(
   process.env.TWITTER_API_KEY as string,
@@ -70,30 +74,25 @@ async function findAndReply(category: string = 'random') {
       return;
     }
     
-    const originalDescription = wisdom_agent.description;
-    
-    wisdom_agent.description = `Reply to: "${accountInfo.tweet_text}"
-
-Output ONLY your reply text (no commands, no function names):`;
-    
-    console.log('Generating reply content...');
+    console.log('Generating reply content with OpenAI...');
     
     try {
-      const agentThinking = await wisdom_agent.step({ verbose: true });
-      console.log('Agent response:', agentThinking);
-      
-      let replyContent = '';
-      
-      if (typeof agentThinking === 'string') {
-        replyContent = agentThinking.trim();
-        replyContent = replyContent.replace(/^Reply:\s*/i, '');
-      } else {
-        console.error('Unexpected agent response format');
-        wisdom_agent.description = originalDescription;
-        return;
-      }
+      const response = await openai.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 150,
+        messages: [{
+          role: "user",
+          content: `Reply to @${accountInfo.handle}'s tweet: "${accountInfo.tweet_text}"
 
-      // Check for invalid responses first
+Write a specific, conversational reply (1-2 sentences, no hashtags). Reference what they actually said, not generic themes.`
+        }]
+      });
+
+      let replyContent = response.choices[0].message.content?.trim() || '';
+      
+      console.log('OpenAI response:', replyContent);
+
+      // Check for invalid responses
       if (replyContent === "go_to" || 
           replyContent === "wait" || 
           replyContent === "call_function" ||
@@ -101,7 +100,6 @@ Output ONLY your reply text (no commands, no function names):`;
           replyContent.includes('reply_tweet(') ||
           replyContent.includes('find_target_account(')) {
         console.log("⚠️ Invalid reply content, skipping:", replyContent);
-        wisdom_agent.description = originalDescription;
         return;
       }
 
@@ -119,7 +117,6 @@ Output ONLY your reply text (no commands, no function names):`;
 
       if (forbiddenPhrases.some(phrase => replyContent.toLowerCase().includes(phrase))) {
         console.log("⚠️ Generic reply detected, skipping:", replyContent);
-        wisdom_agent.description = originalDescription;
         return;
       }
 
@@ -132,7 +129,6 @@ Output ONLY your reply text (no commands, no function names):`;
       
       if (!replyResult || replyResult.status !== 'done') {
         console.error('Failed to post reply:', replyResult?.feedback || 'Unknown error');
-        wisdom_agent.description = originalDescription;
         return;
       }
       
@@ -141,8 +137,8 @@ Output ONLY your reply text (no commands, no function names):`;
       repliedTweets[accountInfo.tweet_id] = Date.now();
       saveRepliedTweets();
       
-    } finally {
-      wisdom_agent.description = originalDescription;
+    } catch (error) {
+      console.error('Error generating or posting reply:', error);
     }
     
   } catch (error) {
@@ -167,8 +163,7 @@ export function startMonitoring(category: string = 'random', intervalMinutes: nu
 }
 
 export async function initializeReplyManager() {
-  wisdom_agent.workers.push(replyGuyWorker);
-  console.log('Reply Guy worker registered with agent');
+  console.log('Reply Guy worker ready (using OpenAI for replies)');
 }
 
 export const replyManager = {
