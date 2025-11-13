@@ -81,6 +81,7 @@ export function createReplyGuyWorker(
     args: [
       { name: "category", description: "Category of accounts to target (optional)", default: "random" }
     ],
+    
     executable: async (args: {category?: string}, logger?: ((msg: string) => void) | null) => {
       try {
         // Check cache first
@@ -188,41 +189,71 @@ export function createReplyGuyWorker(
             }
           }
           
+const hasLink = latestTweet.text && (
+  latestTweet.text.includes('http://') || 
+  latestTweet.text.includes('https://') ||
+  latestTweet.text.includes('t.co/')
+);
+
+if (hasLink) {
+  const textWithoutLinks = latestTweet.text.replace(/https?:\/\/\S+/g, '').trim();
+  if (textWithoutLinks.length < 50) {
+    console.log(`⏭️ Skipping tweet with link and minimal text: ${username}`);
+    return new ExecutableGameFunctionResponse(
+      ExecutableGameFunctionStatus.Failed,
+      `Tweet contains link with minimal context`
+    );
+  }
+}
+          
           // Cache tweets 2-5 with age validation
-          let cachedCount = 0;
-          for (let i = 1; i < tweets.length; i++) {
-            if (tweets[i].created_at) {
-              try {
-                const tweetDate = new Date(tweets[i].created_at!);
-                 if (!isNaN(tweetDate.getTime()) && tweetDate >= threeMonthsAgo) {
-                  tweetCache.push({
-                    userId: userId,
-                    username: username,
-                    handle: randomAccount.handle,
-                    description: randomAccount.description || "Wellness and mindfulness account",
-                    category: "all",
-                    tweet: tweets[i]
-                  });
-                  cachedCount++;
-                } else {
-                  console.log(`⏭️ Skipping old tweet from ${username}: ${tweetDate.toISOString()}`);
-                }
-              } catch (e) {
-                console.log(`⚠️ Invalid date for tweet from ${username}, skipping cache`);
-              }
-            } else {
-              // Cache tweets without dates (assume they're recent if we got them)
-              tweetCache.push({
-                userId: userId,
-                username: username,
-                handle: randomAccount.handle,
-                description: randomAccount.description || "Wellness and mindfulness account",
-                category: "all",
-                tweet: tweets[i]
-              });
-              cachedCount++;
-            }
-          }
+          // Cache tweets 2-5 with age validation
+let cachedCount = 0;
+for (let i = 1; i < tweets.length; i++) {
+  // Check for links first
+  const hasLink = tweets[i].text && (
+    tweets[i].text.includes('http://') || 
+    tweets[i].text.includes('https://') ||
+    tweets[i].text.includes('t.co/')
+  );
+  
+  if (hasLink) {
+    console.log(`⏭️ Skipping tweet with link from ${username}`);
+    continue;
+  }
+  
+  if (tweets[i].created_at) {
+    try {
+      const tweetDate = new Date(tweets[i].created_at!);
+      if (!isNaN(tweetDate.getTime()) && tweetDate >= threeMonthsAgo) {
+        tweetCache.push({
+          userId: userId,
+          username: username,
+          handle: randomAccount.handle,
+          description: randomAccount.description || "Wellness and mindfulness account",
+          category: "all",
+          tweet: tweets[i]
+        });
+        cachedCount++;
+      } else {
+        console.log(`⏭️ Skipping old tweet from ${username}: ${tweetDate.toISOString()}`);
+      }
+    } catch (e) {
+      console.log(`⚠️ Invalid date for tweet from ${username}, skipping cache`);
+    }
+  } else {
+    // Cache tweets without dates
+    tweetCache.push({
+      userId: userId,
+      username: username,
+      handle: randomAccount.handle,
+      description: randomAccount.description || "Wellness and mindfulness account",
+      category: "all",
+      tweet: tweets[i]
+    });
+    cachedCount++;
+  }
+}
           
           console.log(`💾 Cached ${cachedCount} recent tweets (${tweetCache.length} total in cache)`);
           

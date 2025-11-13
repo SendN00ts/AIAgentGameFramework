@@ -133,6 +133,7 @@ Be inventive. Every image must be distinctly different.
 `;
 
 const WISDOM_TOPICS = [
+  "Philosopher quotes",
   "starting new habits and overcoming procrastination",
   "dealing with failure and building resilience",
   "time management and prioritization",
