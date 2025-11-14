@@ -654,6 +654,15 @@ async function main(): Promise<void> {
   }
 }
 
+server.on('request', (req, res) => {
+  if (req.url === '/reset') {
+    postsInCurrentCycle = 0;
+    dailyReplies = 0;
+    saveState();
+    res.end('Reset complete');
+  }
+});
+
 console.log("Starting bot process", new Date().toISOString());
 main().catch(err => {
   console.error("Fatal error in main promise chain:", err);
