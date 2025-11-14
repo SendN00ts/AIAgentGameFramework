@@ -3,6 +3,7 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
+import OpenAI from 'openai';
 
 enum ACTIONS {
   POST = 'post',
@@ -14,6 +15,10 @@ enum ACTIONS {
   QUOTE = 'quote',
   SKIP = 'skip'
 }
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!
+});
 
 const IMAGE_POST_PROBABILITY = 0.2;
 const POSTS_PER_CYCLE = 5;
@@ -515,82 +520,191 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
   }
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer((request, response) => {
   // Reset endpoint
-  if (req.url === '/reset') {
+  if (request.url === '/reset') {
     postsInCurrentCycle = 0;
     imagesInCurrentCycle = 0;
     dailyReplies = 0;
     saveState();
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('Reset complete');
-    return;
-  }
-  
-  // Force post with image
-  if (req.url === '/post-image') {
-    updateAgentForAction(ACTIONS.POST);
-    wisdom_agent.step({ verbose: true }).then(() => {
-      res.writeHead(200, {'Content-Type': 'text/plain'});
-      res.end('Image post triggered');
-    }).catch(err => {
-      res.writeHead(500, {'Content-Type': 'text/plain'});
-      res.end('Error: ' + err.message);
-    });
+    response.writeHead(200, {'Content-Type': 'text/plain'});
+    response.end('Reset complete');
     return;
   }
   
   // Force text post
- if (req.url === '/post-text') {
-  const topic = getNextWisdomTopic();
-  const timestamp = Date.now();
-  updateAgentForAction(ACTIONS.POST_NO_IMAGE);
-  // Force immediate execution
-  wisdom_agent.step({ verbose: true }).then(() => {
-    lastPostTime = Date.now();
-    totalPosts++;
-    textPosts++;
-    postsInCurrentCycle++;
-    saveState();
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('Text post triggered');
-  }).catch(err => {
-    console.error('Post error:', err);
-    res.writeHead(500, {'Content-Type': 'text/plain'});
-    res.end('Error: ' + err.message);
-  });
-  return;
-}
+  if (request.url === '/post-text') {
+    (async () => {
+      const topic = getNextWisdomTopic();
+      
+      try {
+        const openaiResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          max_tokens: 100,
+          messages: [{
+            role: "user",
+            content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
+          }]
+        });
+        
+        const tweetText = openaiResponse.choices[0].message.content?.trim() || '';
+        
+        if (!tweetText || tweetText.length < 10) {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to generate tweet text');
+          return;
+        }
+        
+        const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
+        const postResult = await twitterWorker?.functions
+          .find(f => f.name === 'post_tweet')
+          ?.executable({ text: tweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
+        
+        if (postResult?.status === 'done') {
+          lastPostTime = Date.now();
+          totalPosts++;
+          textPosts++;
+          postsInCurrentCycle++;
+          saveState();
+          
+          response.writeHead(200, {'Content-Type': 'text/plain'});
+          response.end(`Text post successful: ${tweetText}`);
+        } else {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to post tweet');
+        }
+      } catch (err: any) {
+        console.error('Post text error:', err);
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Error: ' + err.message);
+      }
+    })();
+    return;
+  }
+
+  // Force image post
+if (request.url === '/post-image') {
+  (async () => {
+    const topic = getNextWisdomTopic();
+    
+    try {
+      // Generate image prompt
+      const imagePromptResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 100,
+        messages: [{
+          role: "user",
+          content: `Create a unique watercolor image description for a tweet about: ${topic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
+        }]
+      });
+      
+      const imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
+      
+      // Generate tweet text
+      const tweetResponse = await openai.chat.completions.create({
+        model: "gpt-4o",
+        max_tokens: 100,
+        messages: [{
+          role: "user",
+          content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
+        }]
+      });
+      
+      const tweetText = tweetResponse.choices[0].message.content?.trim() || '';
+      
+      if (!tweetText || tweetText.length < 10) {
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Failed to generate tweet text');
+        return;
+      }
+      
+      // Generate image
+      const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
+      const imageResult = await imageGenWorker?.functions
+        .find(f => f.name === 'generate_image')
+        ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
+      
+      if (imageResult?.status !== 'done') {
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Failed to generate image');
+        return;
+      }
+      
+      // Get image URL
+      const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
+      const urlResult = await urlHandlerWorker?.functions
+        .find(f => f.name === 'get_latest_image_url')
+        ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
+      
+      if (urlResult?.status !== 'done') {
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Failed to get image URL');
+        return;
+      }
+      
+      const imageUrl = urlResult.feedback;
+      
+  // Post with image
+        const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
+        const postResult = await mediaWorker?.functions
+          .find(f => f.name === 'upload_image_and_tweet')
+          ?.executable({ text: tweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
+        
+        if (postResult?.status === 'done') {
+          lastPostTime = Date.now();
+          totalPosts++;
+          imagePosts++;
+          imagesInCurrentCycle++;
+          saveState();
+          response.writeHead(200, {'Content-Type': 'text/plain'});
+          response.end(`Image post successful: ${tweetText} [${imageUrl}]`);
+        } else {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to post tweet with image');
+        }
+      } catch (err: any) {
+        console.error('Post image error:', err);
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Error: ' + err.message);
+      }
+    })();
+    return;
+  }
   
   // Force reply
-if (req.url === '/reply') {
-  Promise.resolve(replyManager.startMonitoring('random', 0)).then(() => {
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('Reply triggered');
-  }).catch(err => {
-    res.writeHead(500, {'Content-Type': 'text/plain'});
-    res.end('Error: ' + err.message);
-  });
-  return;
-}
+  if (request.url === '/reply') {
+    Promise.resolve(replyManager.startMonitoring('random', 0))
+      .then(() => {
+        response.writeHead(200, {'Content-Type': 'text/plain'});
+        response.end('Reply triggered');
+      })
+      .catch((err) => {
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Error: ' + err.message);
+      });
+    return;
+  }
 
-  if (req.url === '/like') {
-  updateAgentForAction(ACTIONS.LIKE);
-  wisdom_agent.step({ verbose: true }).then(() => {
-    res.writeHead(200, {'Content-Type': 'text/plain'});
-    res.end('Like triggered');
-  }).catch(err => {
-    res.writeHead(500, {'Content-Type': 'text/plain'});
-    res.end('Error: ' + err.message);
-  });
-  return;
-}
+  // Force like
+  if (request.url === '/like') {
+    updateAgentForAction(ACTIONS.LIKE);
+    wisdom_agent.step({ verbose: true })
+      .then(() => {
+        response.writeHead(200, {'Content-Type': 'text/plain'});
+        response.end('Like triggered');
+      })
+      .catch((err: any) => {
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Error: ' + err.message);
+      });
+    return;
+  }
   
   // Default status page
-  res.writeHead(200, {'Content-Type': 'text/plain'});
+  response.writeHead(200, {'Content-Type': 'text/plain'});
   const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
-  
-  res.end(`Wisdom Bot is running
+
+  response.end(`Wisdom Bot is running
   
 Rate Limit Status:
 - Monthly Cap Exceeded: ${monthlyCapExceeded}
