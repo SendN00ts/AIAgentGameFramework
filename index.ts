@@ -289,7 +289,7 @@ function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): 
   if (action === ACTIONS.POST_NO_IMAGE) {
     const topic = getNextWisdomTopic();
     const timestamp = Date.now();
-    wisdom_agent.description = `Call post_tweet() with BRAND NEW wisdom about: "${topic}"
+    wisdom_agent.description = `EXECUTE NOW: Call post_tweet() with wisdom about: "${topic}"
 
 CRITICAL: Generate completely ORIGINAL content - timestamp ${timestamp}
 
@@ -298,6 +298,7 @@ Requirements:
 - Must be DIFFERENT from ALL previous tweets
 - 1-2 sentences, direct and practical
 - NO hashtags
+- Timestamp: ${timestamp}
 
 FORBIDDEN phrases (do NOT use):
 - "Focus on progress, not perfection"
@@ -311,33 +312,24 @@ Create NEW unique wisdom NOW: post_tweet("your original wisdom here")`;
     return;
   }
   
-  if (action === ACTIONS.POST) {
+ if (action === ACTIONS.POST) {
     const topic = getNextWisdomTopic();
     const timestamp = Date.now();
-    wisdom_agent.description = `Execute 3 functions:
+    wisdom_agent.description = `EXECUTE 3 STEPS NOW:
 
-1. CREATE UNIQUE IMAGE PROMPT following these guidelines:
-${IMAGE_STYLE_GUIDELINES}
-Generate something NEW - timestamp ${timestamp}
+STEP 1: generate_image("watercolor [subject]", 768, 768)
+STEP 2: get_latest_image_url()
+STEP 3: upload_image_and_tweet("wisdom about ${topic}", "url")
 
-Then call: generate_image("your_creative_scene_description", 768, 768)
-
-2. get_latest_image_url()
-
-3. upload_image_and_tweet("ORIGINAL wisdom about ${topic} - timestamp ${timestamp}", "url")
-
-Topic: ${topic}
-Make wisdom FRESH and different from past tweets. NO hashtags.
-
-Execute NOW.`;
+DO IT NOW. Topic: ${topic}. Timestamp: ${timestamp}`;
     return;
   }
   
   const simpleActions: Record<string, string> = {
-  [ACTIONS.SEARCH]: 'ONLY call search_tweets("wisdom") NOW. DO NOT generate images. DO NOT post tweets.',
-  [ACTIONS.LIKE]: 'ONLY call like_tweet(tweet_id) NOW. DO NOT generate images.',
-  [ACTIONS.QUOTE]: 'ONLY call quote_tweet(tweet_id, "insight") NOW. DO NOT generate images.'
-};
+    [ACTIONS.SEARCH]: 'EXECUTE NOW: search_tweets("wisdom")',
+    [ACTIONS.LIKE]: 'EXECUTE NOW: like_tweet(tweet_id)',
+    [ACTIONS.QUOTE]: 'EXECUTE NOW: quote_tweet(tweet_id, "insight")'
+  };
 
   wisdom_agent.description = simpleActions[action] || 'Execute your action.';
 }
