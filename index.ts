@@ -516,8 +516,69 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
 }
 
 const server = http.createServer((req, res) => {
-  res.writeHead(200, {'Content-Type': 'text/plain'});
+  // Reset endpoint
+  if (req.url === '/reset') {
+    postsInCurrentCycle = 0;
+    imagesInCurrentCycle = 0;
+    dailyReplies = 0;
+    saveState();
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Reset complete');
+    return;
+  }
   
+  // Force post with image
+  if (req.url === '/post-image') {
+    updateAgentForAction(ACTIONS.POST);
+    wisdom_agent.step({ verbose: true }).then(() => {
+      res.writeHead(200, {'Content-Type': 'text/plain'});
+      res.end('Image post triggered');
+    }).catch(err => {
+      res.writeHead(500, {'Content-Type': 'text/plain'});
+      res.end('Error: ' + err.message);
+    });
+    return;
+  }
+  
+  // Force text post
+  if (req.url === '/post-text') {
+    updateAgentForAction(ACTIONS.POST_NO_IMAGE);
+    wisdom_agent.step({ verbose: true }).then(() => {
+      res.writeHead(200, {'Content-Type': 'text/plain'});
+      res.end('Text post triggered');
+    }).catch(err => {
+      res.writeHead(500, {'Content-Type': 'text/plain'});
+      res.end('Error: ' + err.message);
+    });
+    return;
+  }
+  
+  // Force reply
+if (req.url === '/reply') {
+  Promise.resolve(replyManager.startMonitoring('random', 0)).then(() => {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Reply triggered');
+  }).catch(err => {
+    res.writeHead(500, {'Content-Type': 'text/plain'});
+    res.end('Error: ' + err.message);
+  });
+  return;
+}
+
+  if (req.url === '/like') {
+  updateAgentForAction(ACTIONS.LIKE);
+  wisdom_agent.step({ verbose: true }).then(() => {
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Like triggered');
+  }).catch(err => {
+    res.writeHead(500, {'Content-Type': 'text/plain'});
+    res.end('Error: ' + err.message);
+  });
+  return;
+}
+  
+  // Default status page
+  res.writeHead(200, {'Content-Type': 'text/plain'});
   const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
   
   res.end(`Wisdom Bot is running
@@ -653,16 +714,6 @@ async function main(): Promise<void> {
     }, 60000);
   }
 }
-
-server.on('request', (req, res) => {
-  if (req.url === '/reset') {
-    postsInCurrentCycle = 0;
-    dailyReplies = 0;
-    imagesInCurrentCycle = 0;
-    saveState();
-    res.end('Reset complete');
-  }
-});
 
 console.log("Starting bot process", new Date().toISOString());
 main().catch(err => {
