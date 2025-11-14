@@ -658,6 +658,7 @@ server.on('request', (req, res) => {
   if (req.url === '/reset') {
     postsInCurrentCycle = 0;
     dailyReplies = 0;
+    imagesInCurrentCycle = 0;
     saveState();
     res.end('Reset complete');
   }
