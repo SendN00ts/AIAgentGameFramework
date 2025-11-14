@@ -44,7 +44,7 @@ let dailyReadAttempts = 0;
 let lastResetDate = '';
 const maxDailyReadAttempts = 300;
 
-const POST_INTERVAL = 288 * 60 * 1000;
+const POST_INTERVAL = 8 * 60 * 1000;
 const REPLY_INTERVAL = 16 * 60 * 1000;
 const OTHER_ACTION_INTERVAL = 60 * 60 * 1000;
 
