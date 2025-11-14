@@ -541,17 +541,26 @@ const server = http.createServer((req, res) => {
   }
   
   // Force text post
-  if (req.url === '/post-text') {
-    updateAgentForAction(ACTIONS.POST_NO_IMAGE);
-    wisdom_agent.step({ verbose: true }).then(() => {
-      res.writeHead(200, {'Content-Type': 'text/plain'});
-      res.end('Text post triggered');
-    }).catch(err => {
-      res.writeHead(500, {'Content-Type': 'text/plain'});
-      res.end('Error: ' + err.message);
-    });
-    return;
-  }
+ if (req.url === '/post-text') {
+  const topic = getNextWisdomTopic();
+  const timestamp = Date.now();
+  updateAgentForAction(ACTIONS.POST_NO_IMAGE);
+  // Force immediate execution
+  wisdom_agent.step({ verbose: true }).then(() => {
+    lastPostTime = Date.now();
+    totalPosts++;
+    textPosts++;
+    postsInCurrentCycle++;
+    saveState();
+    res.writeHead(200, {'Content-Type': 'text/plain'});
+    res.end('Text post triggered');
+  }).catch(err => {
+    console.error('Post error:', err);
+    res.writeHead(500, {'Content-Type': 'text/plain'});
+    res.end('Error: ' + err.message);
+  });
+  return;
+}
   
   // Force reply
 if (req.url === '/reply') {
