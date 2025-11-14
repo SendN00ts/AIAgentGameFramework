@@ -582,7 +582,7 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-  // Force image post
+// Force image post
 if (request.url === '/post-image') {
   (async () => {
     const topic = getNextWisdomTopic();
@@ -644,32 +644,34 @@ if (request.url === '/post-image') {
       
       const imageUrl = urlResult.feedback;
       
-  // Post with image
-        const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
-        const postResult = await mediaWorker?.functions
-          .find(f => f.name === 'upload_image_and_tweet')
-          ?.executable({ text: tweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
+      // Post with image
+      const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
+      const postResult = await mediaWorker?.functions
+        .find(f => f.name === 'upload_image_and_tweet')
+        ?.executable({ text: tweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
+      
+      if (postResult?.status === 'done') {
+        lastPostTime = Date.now();
+        totalPosts++;
+        imagePosts++;
+        imagesInCurrentCycle++;
+        postsInCurrentCycle++;
+        saveState();
         
-        if (postResult?.status === 'done') {
-          lastPostTime = Date.now();
-          totalPosts++;
-          imagePosts++;
-          imagesInCurrentCycle++;
-          saveState();
-          response.writeHead(200, {'Content-Type': 'text/plain'});
-          response.end(`Image post successful: ${tweetText} [${imageUrl}]`);
-        } else {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to post tweet with image');
-        }
-      } catch (err: any) {
-        console.error('Post image error:', err);
+        response.writeHead(200, {'Content-Type': 'text/plain'});
+        response.end(`Image post successful: ${tweetText}`);
+      } else {
         response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Error: ' + err.message);
+        response.end('Failed to post tweet with image');
       }
-    })();
-    return;
-  }
+    } catch (err: any) {
+      console.error('Post image error:', err);
+      response.writeHead(500, {'Content-Type': 'text/plain'});
+      response.end('Error: ' + err.message);
+    }
+  })();
+  return;
+}
   
   // Force reply
   if (request.url === '/reply') {
