@@ -377,6 +377,130 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     try {
       switch (nextAction) {
         case ACTIONS.POST:
+  console.log("Executing POST action (with image)...");
+  const imageTopic = getNextWisdomTopic();
+  
+  try {
+    // Generate image prompt
+    const imagePromptResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 100,
+      messages: [{
+        role: "user",
+        content: `Create a unique watercolor image description for a tweet about: ${imageTopic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
+      }]
+    });
+    
+    const imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
+    
+    // Generate tweet text
+    const tweetResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 100,
+      messages: [{
+        role: "user",
+        content: `Write a tweet about: ${imageTopic}. 1-2 sentences, practical advice, no hashtags.`
+      }]
+    });
+    
+    const imageTweetText = tweetResponse.choices[0].message.content?.trim() || '';
+    
+    if (!imageTweetText || imageTweetText.length < 10) {
+      console.log("Failed to generate tweet text");
+      success = false;
+      break;
+    }
+    
+    // Generate image
+    const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
+    const imageResult = await imageGenWorker?.functions
+      .find(f => f.name === 'generate_image')
+      ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
+    
+    if (imageResult?.status !== 'done') {
+      console.log("Failed to generate image");
+      imageRetryCount++;
+      success = false;
+      break;
+    }
+    
+    // Get image URL
+    const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
+    const urlResult = await urlHandlerWorker?.functions
+      .find(f => f.name === 'get_latest_image_url')
+      ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
+    
+    if (urlResult?.status !== 'done') {
+      console.log("Failed to get image URL");
+      imageRetryCount++;
+      success = false;
+      break;
+    }
+    
+    const imageUrl = urlResult.feedback;
+    
+    // Post with image
+    const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
+    const imagePostResult = await mediaWorker?.functions
+      .find(f => f.name === 'upload_image_and_tweet')
+      ?.executable({ text: imageTweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
+    
+    if (imagePostResult?.status === 'done') {
+      imageRetryCount = 0;
+      success = true;
+      console.log("✅ Image post successful!");
+    } else {
+      console.log("Failed to post tweet with image");
+      imageRetryCount++;
+      success = false;
+    }
+  } catch (error: any) {
+    console.error("Image post error:", error);
+    imageRetryCount++;
+    success = false;
+  }
+  break;
+
+case ACTIONS.POST_NO_IMAGE:
+  console.log("Executing POST_NO_IMAGE action (text only)...");
+  const textTopic = getNextWisdomTopic();
+  
+  try {
+    const textResponse = await openai.chat.completions.create({
+      model: "gpt-4o",
+      max_tokens: 100,
+      messages: [{
+        role: "user",
+        content: `Write a tweet about: ${textTopic}. 1-2 sentences, practical advice, no hashtags.`
+      }]
+    });
+    
+    const textTweetText = textResponse.choices[0].message.content?.trim() || '';
+    
+    if (!textTweetText || textTweetText.length < 10) {
+      console.log("Failed to generate tweet text");
+      success = false;
+      break;
+    }
+    
+    const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
+    const textPostResult = await twitterWorker?.functions
+      .find(f => f.name === 'post_tweet')
+      ?.executable({ text: textTweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
+    
+    if (textPostResult?.status === 'done') {
+      imageRetryCount = 0;
+      success = true;
+      console.log("✅ Text-only post successful!");
+    } else {
+      console.log("Failed to post text tweet");
+      success = false;
+    }
+  } catch (error: any) {
+    console.error("Text post error:", error);
+    success = false;
+  }
+  break;
           console.log("Executing POST action (with image)...");
           let result;
           try {
@@ -415,6 +539,29 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
           break;
         
         case ACTIONS.POST_NO_IMAGE:
+  console.log("Executing POST_NO_IMAGE action (text only)...");
+  const topic = getNextWisdomTopic();
+  
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    max_tokens: 100,
+    messages: [{
+      role: "user",
+      content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
+    }]
+  });
+  
+  const tweetText = response.choices[0].message.content?.trim() || '';
+  
+  const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
+  const postResult = await twitterWorker?.functions
+    .find(f => f.name === 'post_tweet')
+    ?.executable({ text: tweetText }, (msg: string) => console.log(msg));
+  
+  if (postResult?.status === 'done') {
+    success = true;
+  }
+  break;
           console.log("Executing POST_NO_IMAGE action (text only)...");
           await wisdom_agent.step({ verbose: true });
           imageRetryCount = 0;
