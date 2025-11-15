@@ -461,46 +461,46 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
   }
   break;
 
-case ACTIONS.POST_NO_IMAGE:
-  console.log("Executing POST_NO_IMAGE action (text only)...");
-  const textTopic = getNextWisdomTopic();
+      case ACTIONS.POST_NO_IMAGE:
+console.log("Executing POST_NO_IMAGE action (text only)...");
+const textTopic = getNextWisdomTopic();
+
+try {
+  const textResponse = await openai.chat.completions.create({
+    model: "gpt-4o",
+    max_tokens: 100,
+    messages: [{
+      role: "user",
+      content: `Write a tweet about: ${textTopic}. 1-2 sentences, practical advice, no hashtags.`
+    }]
+  });
   
-  try {
-    const textResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      max_tokens: 100,
-      messages: [{
-        role: "user",
-        content: `Write a tweet about: ${textTopic}. 1-2 sentences, practical advice, no hashtags.`
-      }]
-    });
-    
-    const textTweetText = textResponse.choices[0].message.content?.trim() || '';
-    
-    if (!textTweetText || textTweetText.length < 10) {
-      console.log("Failed to generate tweet text");
-      success = false;
-      break;
-    }
-    
-    const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
-    const textPostResult = await twitterWorker?.functions
-      .find(f => f.name === 'post_tweet')
-      ?.executable({ text: textTweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
-    
-    if (textPostResult?.status === 'done') {
-      imageRetryCount = 0;
-      success = true;
-      console.log("✅ Text-only post successful!");
-    } else {
-      console.log("Failed to post text tweet");
-      success = false;
-    }
-  } catch (error: any) {
-    console.error("Text post error:", error);
+  const textTweetText = textResponse.choices[0].message.content?.trim() || '';
+  
+  if (!textTweetText || textTweetText.length < 10) {
+    console.log("Failed to generate tweet text");
+    success = false;
+    break;
+  }
+  
+  const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
+  const textPostResult = await twitterWorker?.functions
+    .find(f => f.name === 'post_tweet')
+    ?.executable({ text: textTweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
+  
+  if (textPostResult?.status === 'done') {
+    imageRetryCount = 0;
+    success = true;
+    console.log("✅ Text-only post successful!");
+  } else {
+    console.log("Failed to post text tweet");
     success = false;
   }
-  break;
+} catch (error: any) {
+  console.error("Text post error:", error);
+  success = false;
+}
+break;
           console.log("Executing POST action (with image)...");
           let result;
           try {
