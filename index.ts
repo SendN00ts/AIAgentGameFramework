@@ -44,7 +44,7 @@ let dailyReadAttempts = 0;
 let lastResetDate = '';
 const maxDailyReadAttempts = 300;
 
-const POST_INTERVAL = 8 * 60 * 1000;
+const POST_INTERVAL = 20 * 60 * 1000;
 const REPLY_INTERVAL = 16 * 60 * 1000;
 const OTHER_ACTION_INTERVAL = 60 * 60 * 1000;
 
@@ -377,201 +377,157 @@ async function runAgentWithSchedule(retryCount = 0): Promise<void> {
     try {
       switch (nextAction) {
         case ACTIONS.POST:
-  console.log("Executing POST action (with image)...");
-  const imageTopic = getNextWisdomTopic();
-  
-  try {
-    // Generate image prompt
-    const imagePromptResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      max_tokens: 100,
-      messages: [{
-        role: "user",
-        content: `Create a unique watercolor image description for a tweet about: ${imageTopic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
-      }]
-    });
-    
-    const imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
-    
-    // Generate tweet text
-    const tweetResponse = await openai.chat.completions.create({
-      model: "gpt-4o",
-      max_tokens: 100,
-      messages: [{
-        role: "user",
-        content: `Write a tweet about: ${imageTopic}. 1-2 sentences, practical advice, no hashtags.`
-      }]
-    });
-    
-    const imageTweetText = tweetResponse.choices[0].message.content?.trim() || '';
-    
-    if (!imageTweetText || imageTweetText.length < 10) {
-      console.log("Failed to generate tweet text");
-      success = false;
-      break;
-    }
-    
-    // Generate image
-    const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
-    const imageResult = await imageGenWorker?.functions
-      .find(f => f.name === 'generate_image')
-      ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
-    
-    if (imageResult?.status !== 'done') {
-      console.log("Failed to generate image");
-      imageRetryCount++;
-      success = false;
-      break;
-    }
-    
-    // Get image URL
-    const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
-    const urlResult = await urlHandlerWorker?.functions
-      .find(f => f.name === 'get_latest_image_url')
-      ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
-    
-    if (urlResult?.status !== 'done') {
-      console.log("Failed to get image URL");
-      imageRetryCount++;
-      success = false;
-      break;
-    }
-    
-    const imageUrl = urlResult.feedback;
-    
-    // Post with image
-    const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
-    const imagePostResult = await mediaWorker?.functions
-      .find(f => f.name === 'upload_image_and_tweet')
-      ?.executable({ text: imageTweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
-    
-    if (imagePostResult?.status === 'done') {
-      imageRetryCount = 0;
-      success = true;
-      console.log("✅ Image post successful!");
-    } else {
-      console.log("Failed to post tweet with image");
-      imageRetryCount++;
-      success = false;
-    }
-  } catch (error: any) {
-    console.error("Image post error:", error);
-    imageRetryCount++;
-    success = false;
-  }
-  break;
-
-      case ACTIONS.POST_NO_IMAGE:
-console.log("Executing POST_NO_IMAGE action (text only)...");
-const textTopic = getNextWisdomTopic();
-
-try {
-  const textResponse = await openai.chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 100,
-    messages: [{
-      role: "user",
-      content: `Write a tweet about: ${textTopic}. 1-2 sentences, practical advice, no hashtags.`
-    }]
-  });
-  
-  const textTweetText = textResponse.choices[0].message.content?.trim() || '';
-  
-  if (!textTweetText || textTweetText.length < 10) {
-    console.log("Failed to generate tweet text");
-    success = false;
-    break;
-  }
-  
-  const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
-  const textPostResult = await twitterWorker?.functions
-    .find(f => f.name === 'post_tweet')
-    ?.executable({ text: textTweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
-  
-  if (textPostResult?.status === 'done') {
-    imageRetryCount = 0;
-    success = true;
-    console.log("✅ Text-only post successful!");
-  } else {
-    console.log("Failed to post text tweet");
-    success = false;
-  }
-} catch (error: any) {
-  console.error("Text post error:", error);
-  success = false;
-}
-break;
           console.log("Executing POST action (with image)...");
-          let result;
-          try {
-            result = await wisdom_agent.step({ verbose: true });
-          } catch (stepError: any) {
-            if (stepError.status === 429 || stepError.response?.status === 429) {
-              const retryAfter = stepError.response?.headers?.['retry-after'] || 60;
-              console.log(`⚠️ Virtuals API rate limit hit. Retry after ${retryAfter}s`);
-              setTimeout(() => runAgentWithSchedule(0), retryAfter * 1000);
-              return;
-            }
-            throw stepError;
-          }
+          let imageTopic = getNextWisdomTopic();
+          let imagePrompt = '';
+          let imageTweetText = '';
+          let imageUrl = '';
           
-          if (result && typeof result === 'string' &&
-             (result.includes("invalid image URL") ||
-              result.includes("Image URL") ||
-              result.includes("URL format") ||
-              result.includes("403 Forbidden") ||
-              result.includes("ENOTFOUND"))) {
+          try {
+            // Generate image prompt
+            const imagePromptResponse = await openai.chat.completions.create({
+              model: "gpt-4o",
+              max_tokens: 100,
+              messages: [{
+                role: "user",
+                content: `Create a unique watercolor image description for a tweet about: ${imageTopic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
+              }]
+            });
             
-            imageRetryCount++;
+            imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
+            console.log("Generated image prompt:", imagePrompt);
             
-            if (imageRetryCount < MAX_IMAGE_RETRIES) {
-              console.log(`⚠️ Image URL validation failed. Retry ${imageRetryCount}/${MAX_IMAGE_RETRIES}`);
-              throw new Error("Image URL validation failed - regenerating image required");
+            // Generate tweet text
+            const tweetResponse = await openai.chat.completions.create({
+              model: "gpt-4o",
+              max_tokens: 100,
+              messages: [{
+                role: "user",
+                content: `Write a tweet about: ${imageTopic}. 1-2 sentences, practical advice, no hashtags.`
+              }]
+            });
+            
+            imageTweetText = tweetResponse.choices[0].message.content?.trim() || '';
+            console.log("Generated tweet text:", imageTweetText);
+            
+            if (!imageTweetText || imageTweetText.length < 10) {
+              console.log("Failed to generate tweet text");
+              success = false;
+              break;
+            }
+            
+            // Generate image
+            const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
+            console.log("Image gen worker found:", !!imageGenWorker);
+            
+            const imageResult = await imageGenWorker?.functions
+              .find(f => f.name === 'generate_image')
+              ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
+            
+            console.log("Image generation result:", imageResult);
+            
+            if (imageResult?.status !== 'done') {
+              console.log("Failed to generate image");
+              imageRetryCount++;
+              success = false;
+              break;
+            }
+            
+            // Get image URL
+            const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
+            console.log("URL handler worker found:", !!urlHandlerWorker);
+            
+            const urlResult = await urlHandlerWorker?.functions
+              .find(f => f.name === 'get_latest_image_url')
+              ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
+            
+            console.log("URL result:", urlResult);
+            
+            if (urlResult?.status !== 'done') {
+              console.log("Failed to get image URL");
+              imageRetryCount++;
+              success = false;
+              break;
+            }
+            
+            imageUrl = urlResult.feedback;
+            console.log("Image URL:", imageUrl);
+            
+            // Post with image
+            const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
+            console.log("Media worker found:", !!mediaWorker);
+            
+            const imagePostResult = await mediaWorker?.functions
+              .find(f => f.name === 'upload_image_and_tweet')
+              ?.executable({ text: imageTweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
+            
+            console.log("Image post result:", imagePostResult);
+            
+            if (imagePostResult?.status === 'done') {
+              imageRetryCount = 0;
+              success = true;
+              console.log("✅ Image post successful!");
             } else {
-              console.log(`⚠️ Max image retries reached (${MAX_IMAGE_RETRIES}). Will post without image next cycle.`);
+              console.log("Failed to post tweet with image - Status:", imagePostResult?.status, "Feedback:", imagePostResult?.feedback);
+              imageRetryCount++;
               success = false;
             }
-          } else {
-            imageRetryCount = 0;
-            success = true;
-            console.log("✅ Image post successful!");
+          } catch (error: any) {
+            console.error("Image post error:", error);
+            imageRetryCount++;
+            success = false;
           }
           break;
-        
+
         case ACTIONS.POST_NO_IMAGE:
-  console.log("Executing POST_NO_IMAGE action (text only)...");
-  const topic = getNextWisdomTopic();
-  
-  const response = await openai.chat.completions.create({
-    model: "gpt-4o",
-    max_tokens: 100,
-    messages: [{
-      role: "user",
-      content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
-    }]
-  });
-  
-  const tweetText = response.choices[0].message.content?.trim() || '';
-  
-  const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
-  const postResult = await twitterWorker?.functions
-    .find(f => f.name === 'post_tweet')
-    ?.executable({ text: tweetText }, (msg: string) => console.log(msg));
-  
-  if (postResult?.status === 'done') {
-    success = true;
-  }
-  break;
           console.log("Executing POST_NO_IMAGE action (text only)...");
-          await wisdom_agent.step({ verbose: true });
-          imageRetryCount = 0;
-          success = true;
-          console.log("✅ Text-only post successful!");
+          let textTopic = getNextWisdomTopic();
+          let textTweetText = '';
+          
+          try {
+            const textResponse = await openai.chat.completions.create({
+              model: "gpt-4o",
+              max_tokens: 100,
+              messages: [{
+                role: "user",
+                content: `Write a tweet about: ${textTopic}. 1-2 sentences, practical advice, no hashtags.`
+              }]
+            });
+            
+            textTweetText = textResponse.choices[0].message.content?.trim() || '';
+            console.log("Generated tweet text:", textTweetText);
+            
+            if (!textTweetText || textTweetText.length < 10) {
+              console.log("Failed to generate tweet text");
+              success = false;
+              break;
+            }
+            
+            const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
+            console.log("Twitter worker found:", !!twitterWorker);
+            
+            const textPostResult = await twitterWorker?.functions
+              .find(f => f.name === 'post_tweet')
+              ?.executable({ text: textTweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
+            
+            console.log("Post result:", textPostResult);
+            
+            if (textPostResult?.status === 'done') {
+              imageRetryCount = 0;
+              success = true;
+              console.log("✅ Text-only post successful!");
+            } else {
+              console.log("Failed to post text tweet - Status:", textPostResult?.status, "Feedback:", textPostResult?.feedback);
+              success = false;
+            }
+          } catch (error: any) {
+            console.error("Text post error:", error);
+            success = false;
+          }
           break;
           
         case ACTIONS.REPLY_TARGETS:
           console.log("Executing REPLY_TARGETS action through reply manager...");
-          
           incrementReadAttempts();
           
           try {
@@ -729,96 +685,96 @@ const server = http.createServer((request, response) => {
     return;
   }
 
-// Force image post
-if (request.url === '/post-image') {
-  (async () => {
-    const topic = getNextWisdomTopic();
-    
-    try {
-      // Generate image prompt
-      const imagePromptResponse = await openai.chat.completions.create({
-        model: "gpt-4o",
-        max_tokens: 100,
-        messages: [{
-          role: "user",
-          content: `Create a unique watercolor image description for a tweet about: ${topic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
-        }]
-      });
+  // Force image post
+  if (request.url === '/post-image') {
+    (async () => {
+      const topic = getNextWisdomTopic();
       
-      const imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
-      
-      // Generate tweet text
-      const tweetResponse = await openai.chat.completions.create({
-        model: "gpt-4o",
-        max_tokens: 100,
-        messages: [{
-          role: "user",
-          content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
-        }]
-      });
-      
-      const tweetText = tweetResponse.choices[0].message.content?.trim() || '';
-      
-      if (!tweetText || tweetText.length < 10) {
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Failed to generate tweet text');
-        return;
-      }
-      
-      // Generate image
-      const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
-      const imageResult = await imageGenWorker?.functions
-        .find(f => f.name === 'generate_image')
-        ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
-      
-      if (imageResult?.status !== 'done') {
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Failed to generate image');
-        return;
-      }
-      
-      // Get image URL
-      const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
-      const urlResult = await urlHandlerWorker?.functions
-        .find(f => f.name === 'get_latest_image_url')
-        ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
-      
-      if (urlResult?.status !== 'done') {
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Failed to get image URL');
-        return;
-      }
-      
-      const imageUrl = urlResult.feedback;
-      
-      // Post with image
-      const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
-      const postResult = await mediaWorker?.functions
-        .find(f => f.name === 'upload_image_and_tweet')
-        ?.executable({ text: tweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
-      
-      if (postResult?.status === 'done') {
-        lastPostTime = Date.now();
-        totalPosts++;
-        imagePosts++;
-        imagesInCurrentCycle++;
-        postsInCurrentCycle++;
-        saveState();
+      try {
+        // Generate image prompt
+        const imagePromptResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          max_tokens: 100,
+          messages: [{
+            role: "user",
+            content: `Create a unique watercolor image description for a tweet about: ${topic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
+          }]
+        });
         
-        response.writeHead(200, {'Content-Type': 'text/plain'});
-        response.end(`Image post successful: ${tweetText}`);
-      } else {
+        const imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
+        
+        // Generate tweet text
+        const tweetResponse = await openai.chat.completions.create({
+          model: "gpt-4o",
+          max_tokens: 100,
+          messages: [{
+            role: "user",
+            content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
+          }]
+        });
+        
+        const tweetText = tweetResponse.choices[0].message.content?.trim() || '';
+        
+        if (!tweetText || tweetText.length < 10) {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to generate tweet text');
+          return;
+        }
+        
+        // Generate image
+        const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
+        const imageResult = await imageGenWorker?.functions
+          .find(f => f.name === 'generate_image')
+          ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
+        
+        if (imageResult?.status !== 'done') {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to generate image');
+          return;
+        }
+        
+        // Get image URL
+        const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
+        const urlResult = await urlHandlerWorker?.functions
+          .find(f => f.name === 'get_latest_image_url')
+          ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
+        
+        if (urlResult?.status !== 'done') {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to get image URL');
+          return;
+        }
+        
+        const imageUrl = urlResult.feedback;
+        
+        // Post with image
+        const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
+        const postResult = await mediaWorker?.functions
+          .find(f => f.name === 'upload_image_and_tweet')
+          ?.executable({ text: tweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
+        
+        if (postResult?.status === 'done') {
+          lastPostTime = Date.now();
+          totalPosts++;
+          imagePosts++;
+          imagesInCurrentCycle++;
+          postsInCurrentCycle++;
+          saveState();
+          
+          response.writeHead(200, {'Content-Type': 'text/plain'});
+          response.end(`Image post successful: ${tweetText}`);
+        } else {
+          response.writeHead(500, {'Content-Type': 'text/plain'});
+          response.end('Failed to post tweet with image');
+        }
+      } catch (err: any) {
+        console.error('Post image error:', err);
         response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Failed to post tweet with image');
+        response.end('Error: ' + err.message);
       }
-    } catch (err: any) {
-      console.error('Post image error:', err);
-      response.writeHead(500, {'Content-Type': 'text/plain'});
-      response.end('Error: ' + err.message);
-    }
-  })();
-  return;
-}
+    })();
+    return;
+  }
   
   // Force reply
   if (request.url === '/reply') {
