@@ -3,57 +3,20 @@ import * as http from 'http';
 import * as fs from 'fs';
 import * as path from 'path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
-import OpenAI from 'openai';
-
-enum ACTIONS {
-  POST = 'post',
-  POST_NO_IMAGE = 'post_no_image',
-  REPLY = 'reply',
-  REPLY_TARGETS = 'reply_targets',
-  SEARCH = 'search',
-  LIKE = 'like',
-  QUOTE = 'quote',
-  SKIP = 'skip'
-}
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!
-});
-
-const IMAGE_POST_PROBABILITY = 0.2;
-const POSTS_PER_CYCLE = 5;
-const IMAGES_PER_CYCLE = 1;
-
-let postsInCurrentCycle = 0;
-let imagesInCurrentCycle = 0;
-let lastPostTime = 0;
-let lastReplyTime = 0;
-let dailyReplies = 0;
-let totalPosts = 0;
-let imagePosts = 0;
-let textPosts = 0;
 
 const REPLIES_PER_DAY_TARGET = 90;
-let functionCalledThisCycle = false;
-let imageRetryCount = 0;
-const MAX_IMAGE_RETRIES = 2;
+const REPLY_INTERVAL = 16 * 60 * 1000; // 16 minutes
+
+let lastReplyTime = 0;
+let dailyReplies = 0;
+let lastResetDate = '';
 
 let monthlyCapExceeded = false;
 let monthlyCapResetTime = 0;
 let dailyReadAttempts = 0;
-let lastResetDate = '';
 const maxDailyReadAttempts = 300;
 
-const POST_INTERVAL = 20 * 60 * 1000;
-const REPLY_INTERVAL = 16 * 60 * 1000;
-const OTHER_ACTION_INTERVAL = 60 * 60 * 1000;
-
-let currentActionIndex = 0;
-const READ_ACTIONS = [ACTIONS.SEARCH, ACTIONS.LIKE, ACTIONS.QUOTE];
-const WRITE_ACTIONS = [ACTIONS.POST, ACTIONS.POST_NO_IMAGE];
-
-// Persistent storage
-const STATE_FILE = '/app/data/bot_state.json';
+const STATE_FILE = '/app/data/reply_state.json';
 
 function saveState() {
   try {
@@ -63,18 +26,13 @@ function saveState() {
     }
     
     fs.writeFileSync(STATE_FILE, JSON.stringify({
-      postsInCurrentCycle,
-      imagesInCurrentCycle,
-      totalPosts,
-      imagePosts,
-      textPosts,
-      lastPostTime,
       lastReplyTime,
       dailyReplies,
-      lastResetDate
+      lastResetDate,
+      dailyReadAttempts
     }, null, 2));
     
-    console.log('💾 State saved to persistent storage');
+    console.log('💾 State saved');
   } catch (error) {
     console.error('Error saving state:', error);
   }
@@ -84,79 +42,19 @@ function loadState() {
   try {
     if (fs.existsSync(STATE_FILE)) {
       const state = JSON.parse(fs.readFileSync(STATE_FILE, 'utf8'));
-      postsInCurrentCycle = state.postsInCurrentCycle || 0;
-      imagesInCurrentCycle = state.imagesInCurrentCycle || 0;
-      totalPosts = state.totalPosts || 0;
-      imagePosts = state.imagePosts || 0;
-      textPosts = state.textPosts || 0;
-      lastPostTime = state.lastPostTime || 0;
       lastReplyTime = state.lastReplyTime || 0;
       dailyReplies = state.dailyReplies || 0;
       lastResetDate = state.lastResetDate || '';
+      dailyReadAttempts = state.dailyReadAttempts || 0;
       
-      console.log('✅ State loaded from persistent storage:', {
-        totalPosts,
-        imagePosts,
-        textPosts,
-        postsInCycle: postsInCurrentCycle,
-        imagesInCycle: imagesInCurrentCycle,
-        dailyReplies
+      console.log('✅ State loaded:', {
+        dailyReplies,
+        dailyReadAttempts
       });
-    } else {
-      console.log('No previous state found, starting fresh');
     }
   } catch (error) {
     console.error('Error loading state:', error);
   }
-}
-
-const IMAGE_STYLE_GUIDELINES = `
-STYLE: Soft watercolor, muted earth tones, atmospheric natural lighting
-
-CREATE A UNIQUE SCENE - choose your own subject using these principles:
-
-COMPOSITION OPTIONS (pick one):
-- Interior architectural space with light and nature visible
-- Single meaningful object in contemplative setting
-- Small arrangement of items with symbolic meaning
-
-REQUIREMENTS:
-- Soft watercolor technique with gentle edges
-- Natural light source (sunlight, window light, soft glow)
-- Muted palette: earth tones, subtle blues/greens
-- Contemplative, peaceful mood
-- Touch of nature or life (sky, plants, or organic elements)
-
-AVOID:
-- Exterior building facades
-- Modern/industrial settings
-- Busy or cluttered compositions
-- Bright artificial colors
-- Literal repetition of past images
-
-Be inventive. Every image must be distinctly different.
-`;
-
-const WISDOM_TOPICS = [
-  "Philosopher quotes",
-  "starting new habits and overcoming procrastination",
-  "dealing with failure and building resilience",
-  "time management and prioritization",
-  "maintaining focus in distractions",
-  "setting boundaries and saying no",
-  "consistency vs perfection mindset",
-  "learning from mistakes and iteration",
-  "building discipline when motivation fades",
-  "breaking big goals into small steps",
-  "managing energy not just time"
-];
-
-let currentTopicIndex = 0;
-
-function getNextWisdomTopic(): string {
-  const topic = WISDOM_TOPICS[currentTopicIndex];
-  currentTopicIndex = (currentTopicIndex + 1) % WISDOM_TOPICS.length;
-  return topic;
 }
 
 function resetDailyCounterIfNeeded(): void {
@@ -184,14 +82,6 @@ function handleTwitterError(error: any): void {
       const resetDate = new Date(monthlyCapResetTime * 1000);
       console.log(`🚫 MONTHLY CAP EXCEEDED! No more read operations until: ${resetDate.toISOString()}`);
     }
-    
-    if (error.headers?.['x-user-limit-24hour-remaining'] === '0') {
-      const resetTime = parseInt(error.headers['x-user-limit-24hour-reset']);
-      const resetDate = new Date(resetTime * 1000);
-      console.log(`🚫 DAILY TWEET LIMIT (100/day) EXCEEDED! Can post again at: ${resetDate.toISOString()}`);
-      monthlyCapExceeded = true;
-      monthlyCapResetTime = resetTime;
-    }
   }
 }
 
@@ -206,12 +96,12 @@ function canMakeReadRequest(): boolean {
     } else {
       monthlyCapExceeded = false;
       monthlyCapResetTime = 0;
-      console.log(`✅ Monthly cap reset! Read operations are now allowed.`);
+      console.log(`✅ Monthly cap reset! Read operations allowed.`);
     }
   }
   
   if (dailyReadAttempts >= maxDailyReadAttempts) {
-    console.log(`⚠️ Daily read limit reached (${maxDailyReadAttempts}). Skipping to preserve monthly quota.`);
+    console.log(`⚠️ Daily read limit reached (${maxDailyReadAttempts}).`);
     return false;
   }
   
@@ -229,721 +119,151 @@ function incrementReplyCount(): void {
   saveState();
 }
 
-function isReadAction(action: ACTIONS): boolean {
-  return READ_ACTIONS.includes(action);
-}
-
-function getNextAction(): ACTIONS {
+async function attemptReply(): Promise<void> {
   const now = Date.now();
-  const timeSinceLastPost = now - lastPostTime;
   const timeSinceLastReply = now - lastReplyTime;
   
-  console.log("Time since last post:", Math.round(timeSinceLastPost/1000), "seconds");
-  console.log("Time since last reply:", Math.round(timeSinceLastReply/1000), "seconds");
-  
-  if (timeSinceLastPost >= POST_INTERVAL) {
-    console.log("Time for a new post!");
-    console.log(`Cycle status: ${postsInCurrentCycle}/${POSTS_PER_CYCLE}, images: ${imagesInCurrentCycle}/${IMAGES_PER_CYCLE}`);
-    
-    if (postsInCurrentCycle >= POSTS_PER_CYCLE) {
-      postsInCurrentCycle = 0;
-      imagesInCurrentCycle = 0;
-      console.log("📊 New cycle started");
-      saveState();
-    }
-    
-    let useImage = false;
-    if (imagesInCurrentCycle < IMAGES_PER_CYCLE) {
-      const postsRemaining = POSTS_PER_CYCLE - postsInCurrentCycle;
-      const imagesRemaining = IMAGES_PER_CYCLE - imagesInCurrentCycle;
-      const chanceOfImage = imagesRemaining / postsRemaining;
-      
-      useImage = Math.random() <= chanceOfImage;
-    }
-    
-    postsInCurrentCycle++;
-    
-    if (useImage && imageRetryCount < MAX_IMAGE_RETRIES) {
-      imagesInCurrentCycle++;
-      console.log(`✅ POST WITH image (${imagesInCurrentCycle}/${IMAGES_PER_CYCLE} in cycle)`);
-      return ACTIONS.POST;
-    } else {
-      console.log(`✅ POST WITHOUT image (${postsInCurrentCycle - imagesInCurrentCycle}/${POSTS_PER_CYCLE - IMAGES_PER_CYCLE} text posts in cycle)`);
-      return ACTIONS.POST_NO_IMAGE;
-    }
+  if (timeSinceLastReply < REPLY_INTERVAL) {
+    const minutesRemaining = Math.round((REPLY_INTERVAL - timeSinceLastReply) / 60000);
+    console.log(`⏰ Next reply in ${minutesRemaining} minutes`);
+    return;
   }
   
-  if (timeSinceLastReply >= REPLY_INTERVAL && dailyReplies < REPLIES_PER_DAY_TARGET && canMakeReadRequest()) {
-    console.log(`📨 Time for reply (${dailyReplies}/${REPLIES_PER_DAY_TARGET} today)`);
-    return ACTIONS.REPLY_TARGETS;
+  if (dailyReplies >= REPLIES_PER_DAY_TARGET) {
+    console.log(`✅ Daily reply target reached (${dailyReplies}/${REPLIES_PER_DAY_TARGET})`);
+    return;
   }
   
   if (!canMakeReadRequest()) {
-    console.log("⚠️ No read actions available due to rate limits. Waiting for next post or reply time.");
-    return ACTIONS.SKIP;
-  }
-  
-  const action = READ_ACTIONS[currentActionIndex];
-  currentActionIndex = (currentActionIndex + 1) % READ_ACTIONS.length;
-  return action;
-}
-
-function updateAgentForAction(action: ACTIONS, needsImageRegeneration = false): void {
-  if (action === ACTIONS.SKIP) return;
-  
-  if (action === ACTIONS.POST_NO_IMAGE) {
-    const topic = getNextWisdomTopic();
-    const timestamp = Date.now();
-    wisdom_agent.description = `EXECUTE NOW: Call post_tweet() with wisdom about: "${topic}"
-
-CRITICAL: Generate completely ORIGINAL content - timestamp ${timestamp}
-
-Requirements:
-- Must be about: ${topic}
-- Must be DIFFERENT from ALL previous tweets
-- 1-2 sentences, direct and practical
-- NO hashtags
-- Timestamp: ${timestamp}
-
-FORBIDDEN phrases (do NOT use):
-- "Focus on progress, not perfection"
-- "Small daily improvements"
-- "The best time to start"
-- "Your thoughts create your reality"
-- "Stop waiting for motivation"
-- "Discipline is the bridge"
-
-Create NEW unique wisdom NOW: post_tweet("your original wisdom here")`;
+    console.log("⚠️ Cannot make read request due to rate limits");
     return;
   }
   
- if (action === ACTIONS.POST) {
-    const topic = getNextWisdomTopic();
-    const timestamp = Date.now();
-    wisdom_agent.description = `EXECUTE 3 STEPS NOW:
-
-STEP 1: generate_image("watercolor [subject]", 768, 768)
-STEP 2: get_latest_image_url()
-STEP 3: upload_image_and_tweet("wisdom about ${topic}", "url")
-
-DO IT NOW. Topic: ${topic}. Timestamp: ${timestamp}`;
-    return;
-  }
+  console.log(`📨 Time for reply (${dailyReplies}/${REPLIES_PER_DAY_TARGET} today)`);
   
-  const simpleActions: Record<string, string> = {
-    [ACTIONS.SEARCH]: 'EXECUTE NOW: search_tweets("wisdom")',
-    [ACTIONS.LIKE]: 'EXECUTE NOW: like_tweet(tweet_id)',
-    [ACTIONS.QUOTE]: 'EXECUTE NOW: quote_tweet(tweet_id, "insight")'
-  };
-
-  wisdom_agent.description = simpleActions[action] || 'Execute your action.';
-}
-
-async function runAgentWithSchedule(retryCount = 0): Promise<void> {
+  incrementReadAttempts();
+  
   try {
-    console.log("=== Starting scheduler cycle ===");
-    
-    console.log("📊 Rate limit status:", {
-      monthlyCapExceeded,
-      dailyAttempts: dailyReadAttempts,
-      maxDailyAttempts: maxDailyReadAttempts,
-      dailyReplies: dailyReplies
-    });
-    
-    functionCalledThisCycle = false;
-    
-    const nextAction = getNextAction();
-    
-    if (nextAction === ACTIONS.SKIP) {
-      console.log("⏭️ Skipping this cycle due to rate limits. Scheduling next cycle.");
-      const checkInterval = Math.min(POST_INTERVAL, REPLY_INTERVAL, OTHER_ACTION_INTERVAL) / 2;
-      setTimeout(() => runAgentWithSchedule(0), checkInterval);
-      return;
-    }
-    
-    if (isReadAction(nextAction) && !canMakeReadRequest()) {
-      console.log(`⚠️ Double-check: Skipping ${nextAction} due to rate limits.`);
-      const checkInterval = Math.min(POST_INTERVAL, REPLY_INTERVAL, OTHER_ACTION_INTERVAL) / 2;
-      setTimeout(() => runAgentWithSchedule(0), checkInterval);
-      return;
-    }
-    
-    updateAgentForAction(nextAction);
-    
-    console.log(`Running agent step at ${new Date().toISOString()} - Action: ${nextAction}`);
-    
-    let success = false;
-    
-    try {
-      switch (nextAction) {
-        case ACTIONS.POST:
-          console.log("Executing POST action (with image)...");
-          let imageTopic = getNextWisdomTopic();
-          let imagePrompt = '';
-          let imageTweetText = '';
-          let imageUrl = '';
-          
-          try {
-            // Generate image prompt
-            const imagePromptResponse = await openai.chat.completions.create({
-              model: "gpt-4o",
-              max_tokens: 100,
-              messages: [{
-                role: "user",
-                content: `Create a unique watercolor image description for a tweet about: ${imageTopic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
-              }]
-            });
-            
-            imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
-            console.log("Generated image prompt:", imagePrompt);
-            
-            // Generate tweet text
-            const tweetResponse = await openai.chat.completions.create({
-              model: "gpt-4o",
-              max_tokens: 100,
-              messages: [{
-                role: "user",
-                content: `Write a tweet about: ${imageTopic}. 1-2 sentences, practical advice, no hashtags.`
-              }]
-            });
-            
-            imageTweetText = tweetResponse.choices[0].message.content?.trim() || '';
-            console.log("Generated tweet text:", imageTweetText);
-            
-            if (!imageTweetText || imageTweetText.length < 10) {
-              console.log("Failed to generate tweet text");
-              success = false;
-              break;
-            }
-            
-            // Generate image
-            const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
-            console.log("Image gen worker found:", !!imageGenWorker);
-            
-            const imageResult = await imageGenWorker?.functions
-              .find(f => f.name === 'generate_image')
-              ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
-            
-            console.log("Image generation result:", imageResult);
-            
-            if (imageResult?.status !== 'done') {
-              console.log("Failed to generate image");
-              imageRetryCount++;
-              success = false;
-              break;
-            }
-            
-            // Get image URL
-            const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
-            console.log("URL handler worker found:", !!urlHandlerWorker);
-            
-            const urlResult = await urlHandlerWorker?.functions
-              .find(f => f.name === 'get_latest_image_url')
-              ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
-            
-            console.log("URL result:", urlResult);
-            
-            if (urlResult?.status !== 'done') {
-              console.log("Failed to get image URL");
-              imageRetryCount++;
-              success = false;
-              break;
-            }
-            
-            imageUrl = urlResult.feedback;
-            console.log("Image URL:", imageUrl);
-            
-            // Post with image
-            const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
-            console.log("Media worker found:", !!mediaWorker);
-            
-            const imagePostResult = await mediaWorker?.functions
-              .find(f => f.name === 'upload_image_and_tweet')
-              ?.executable({ text: imageTweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
-            
-            console.log("Image post result:", imagePostResult);
-            
-            if (imagePostResult?.status === 'done') {
-              imageRetryCount = 0;
-              success = true;
-              console.log("✅ Image post successful!");
-            } else {
-              console.log("Failed to post tweet with image - Status:", imagePostResult?.status, "Feedback:", imagePostResult?.feedback);
-              imageRetryCount++;
-              success = false;
-            }
-          } catch (error: any) {
-            console.error("Image post error:", error);
-            imageRetryCount++;
-            success = false;
-          }
-          break;
-
-        case ACTIONS.POST_NO_IMAGE:
-          console.log("Executing POST_NO_IMAGE action (text only)...");
-          let textTopic = getNextWisdomTopic();
-          let textTweetText = '';
-          
-          try {
-            const textResponse = await openai.chat.completions.create({
-              model: "gpt-4o",
-              max_tokens: 100,
-              messages: [{
-                role: "user",
-                content: `Write a tweet about: ${textTopic}. 1-2 sentences, practical advice, no hashtags.`
-              }]
-            });
-            
-            textTweetText = textResponse.choices[0].message.content?.trim() || '';
-            console.log("Generated tweet text:", textTweetText);
-            
-            if (!textTweetText || textTweetText.length < 10) {
-              console.log("Failed to generate tweet text");
-              success = false;
-              break;
-            }
-            
-            const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
-            console.log("Twitter worker found:", !!twitterWorker);
-            
-            const textPostResult = await twitterWorker?.functions
-              .find(f => f.name === 'post_tweet')
-              ?.executable({ text: textTweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
-            
-            console.log("Post result:", textPostResult);
-            
-            if (textPostResult?.status === 'done') {
-              imageRetryCount = 0;
-              success = true;
-              console.log("✅ Text-only post successful!");
-            } else {
-              console.log("Failed to post text tweet - Status:", textPostResult?.status, "Feedback:", textPostResult?.feedback);
-              success = false;
-            }
-          } catch (error: any) {
-            console.error("Text post error:", error);
-            success = false;
-          }
-          break;
-          
-        case ACTIONS.REPLY_TARGETS:
-          console.log("Executing REPLY_TARGETS action through reply manager...");
-          incrementReadAttempts();
-          
-          try {
-            await replyManager.startMonitoring('random', 0);
-            incrementReplyCount();
-            lastReplyTime = Date.now();
-            success = true;
-          } catch (error: any) {
-            handleTwitterError(error);
-            console.log(`⚠️ Reply failed, not counting toward daily total`);
-            success = false;
-          }
-          break;
-          
-        default:
-          console.log(`Executing ${nextAction} action...`);
-          
-          if (isReadAction(nextAction)) {
-            incrementReadAttempts();
-          }
-          
-          try {
-            await wisdom_agent.step({ verbose: true });
-            success = true;
-          } catch (error: any) {
-            if (isReadAction(nextAction)) {
-              handleTwitterError(error);
-            }
-            console.log(`⚠️ Action ${nextAction} failed:`, error.message);
-            success = false;
-          }
-      }
-    } catch (error: unknown) {
-      const actionError = error as Error;
-      console.error(`Action error (${nextAction}):`, actionError.message);
-      
-      if (nextAction === ACTIONS.POST &&
-          typeof actionError.message === 'string' &&
-          (actionError.message.includes("Image URL") ||
-           actionError.message.includes("URL format") ||
-           actionError.message.includes("ENOTFOUND") ||
-           actionError.message.includes("403 Forbidden"))) {
-        
-        if (imageRetryCount < MAX_IMAGE_RETRIES) {
-          updateAgentForAction(nextAction, true);
-          console.log(`🔄 Retrying post with image regeneration hint (${imageRetryCount}/${MAX_IMAGE_RETRIES})...`);
-          await wisdom_agent.step({ verbose: true });
-          success = true;
-        } else {
-          success = false;
-        }
-      } else {
-        throw actionError;
-      }
-    }
-    
-    if ((nextAction === ACTIONS.POST || nextAction === ACTIONS.POST_NO_IMAGE) && success) {
-      lastPostTime = Date.now();
-      totalPosts++;
-      
-      if (nextAction === ACTIONS.POST) {
-        imagePosts++;
-        console.log(`📊 Image post recorded. Total: ${imagePosts} image posts`);
-      } else if (nextAction === ACTIONS.POST_NO_IMAGE) {
-        textPosts++;
-        console.log(`📊 Text post recorded. Total: ${textPosts} text posts`);
-      }
-      
-      const imagePostPercentage = (imagePosts / totalPosts) * 100;
-      console.log(`📈 Post Stats - Target: ${IMAGE_POST_PROBABILITY * 100}% images, Actual: ${imagePostPercentage.toFixed(1)}%`);
-      console.log(`📊 Total: ${totalPosts} posts (${imagePosts} with images, ${textPosts} text-only)`);
-      
-      saveState();
-    }
-    
-    const checkInterval = Math.min(POST_INTERVAL, REPLY_INTERVAL, OTHER_ACTION_INTERVAL) / 2;
-    
-    console.log(`Scheduling next cycle check in ${Math.round(checkInterval/1000)} seconds`);
-    setTimeout(() => runAgentWithSchedule(0), checkInterval);
-    
-  } catch (error) {
-    console.error(`Error running agent step:`, error);
-    
-    const baseDelay = Math.min(
-      (Math.pow(2, retryCount) * 60 * 1000),
-      30 * 60 * 1000
-    );
-    const jitter = Math.random() * 30 * 1000;
-    const retryDelay = baseDelay + jitter;
-    
-    console.log(`Retry attempt ${retryCount+1}, waiting ${Math.round(retryDelay/1000)} seconds...`);
-    setTimeout(() => runAgentWithSchedule(retryCount + 1), retryDelay);
+    await replyManager.startMonitoring('random', 0);
+    incrementReplyCount();
+    lastReplyTime = Date.now();
+    console.log("✅ Reply successful!");
+  } catch (error: any) {
+    handleTwitterError(error);
+    console.log(`⚠️ Reply failed:`, error.message);
   }
 }
 
 const server = http.createServer((request, response) => {
-  // Reset endpoint
-  if (request.url === '/reset') {
-    postsInCurrentCycle = 0;
-    imagesInCurrentCycle = 0;
-    dailyReplies = 0;
-    saveState();
+  if (request.url === '/') {
+    const minutesSinceReply = Math.round((Date.now() - lastReplyTime) / 60000);
+    const minutesUntilNext = Math.max(0, Math.round((REPLY_INTERVAL - (Date.now() - lastReplyTime)) / 60000));
+    
     response.writeHead(200, {'Content-Type': 'text/plain'});
-    response.end('Reset complete');
-    return;
-  }
-  
-  // Force text post
-  if (request.url === '/post-text') {
-    (async () => {
-      const topic = getNextWisdomTopic();
-      
-      try {
-        const openaiResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          max_tokens: 100,
-          messages: [{
-            role: "user",
-            content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
-          }]
-        });
-        
-        const tweetText = openaiResponse.choices[0].message.content?.trim() || '';
-        
-        if (!tweetText || tweetText.length < 10) {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to generate tweet text');
-          return;
-        }
-        
-        const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
-        const postResult = await twitterWorker?.functions
-          .find(f => f.name === 'post_tweet')
-          ?.executable({ text: tweetText }, (msg: string) => console.log(`[Post Tweet] ${msg}`));
-        
-        if (postResult?.status === 'done') {
-          lastPostTime = Date.now();
-          totalPosts++;
-          textPosts++;
-          postsInCurrentCycle++;
-          saveState();
-          
-          response.writeHead(200, {'Content-Type': 'text/plain'});
-          response.end(`Text post successful: ${tweetText}`);
-        } else {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to post tweet');
-        }
-      } catch (err: any) {
-        console.error('Post text error:', err);
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Error: ' + err.message);
-      }
-    })();
-    return;
-  }
+    response.end(`AIleen Reply Agent
 
-  // Force image post
-  if (request.url === '/post-image') {
-    (async () => {
-      const topic = getNextWisdomTopic();
-      
-      try {
-        // Generate image prompt
-        const imagePromptResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          max_tokens: 100,
-          messages: [{
-            role: "user",
-            content: `Create a unique watercolor image description for a tweet about: ${topic}. Describe a peaceful scene (courtyard, teacup, window seat, etc). One sentence, focus on mood and composition.`
-          }]
-        });
-        
-        const imagePrompt = imagePromptResponse.choices[0].message.content?.trim() || 'watercolor peaceful scene';
-        
-        // Generate tweet text
-        const tweetResponse = await openai.chat.completions.create({
-          model: "gpt-4o",
-          max_tokens: 100,
-          messages: [{
-            role: "user",
-            content: `Write a tweet about: ${topic}. 1-2 sentences, practical advice, no hashtags.`
-          }]
-        });
-        
-        const tweetText = tweetResponse.choices[0].message.content?.trim() || '';
-        
-        if (!tweetText || tweetText.length < 10) {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to generate tweet text');
-          return;
-        }
-        
-        // Generate image
-        const imageGenWorker = wisdom_agent.workers.find(w => w.id === "wisdom_image_gen");
-        const imageResult = await imageGenWorker?.functions
-          .find(f => f.name === 'generate_image')
-          ?.executable({ prompt: imagePrompt, width: '768', height: '768' }, (msg: string) => console.log(`[Image Gen] ${msg}`));
-        
-        if (imageResult?.status !== 'done') {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to generate image');
-          return;
-        }
-        
-        // Get image URL
-        const urlHandlerWorker = wisdom_agent.workers.find(w => w.id === "image_url_handler");
-        const urlResult = await urlHandlerWorker?.functions
-          .find(f => f.name === 'get_latest_image_url')
-          ?.executable({}, (msg: string) => console.log(`[URL Handler] ${msg}`));
-        
-        if (urlResult?.status !== 'done') {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to get image URL');
-          return;
-        }
-        
-        const imageUrl = urlResult.feedback;
-        
-        // Post with image
-        const mediaWorker = wisdom_agent.workers.find(w => w.id === "twitter_media_worker");
-        const postResult = await mediaWorker?.functions
-          .find(f => f.name === 'upload_image_and_tweet')
-          ?.executable({ text: tweetText, image_url: imageUrl }, (msg: string) => console.log(`[Media Post] ${msg}`));
-        
-        if (postResult?.status === 'done') {
-          lastPostTime = Date.now();
-          totalPosts++;
-          imagePosts++;
-          imagesInCurrentCycle++;
-          postsInCurrentCycle++;
-          saveState();
-          
-          response.writeHead(200, {'Content-Type': 'text/plain'});
-          response.end(`Image post successful: ${tweetText}`);
-        } else {
-          response.writeHead(500, {'Content-Type': 'text/plain'});
-          response.end('Failed to post tweet with image');
-        }
-      } catch (err: any) {
-        console.error('Post image error:', err);
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Error: ' + err.message);
-      }
-    })();
-    return;
-  }
-  
-  // Force reply
-  if (request.url === '/reply') {
-    Promise.resolve(replyManager.startMonitoring('random', 0))
-      .then(() => {
-        response.writeHead(200, {'Content-Type': 'text/plain'});
-        response.end('Reply triggered');
-      })
-      .catch((err) => {
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Error: ' + err.message);
-      });
-    return;
-  }
+Status: Running
+Replies per day target: ${REPLIES_PER_DAY_TARGET}
+Reply interval: ${REPLY_INTERVAL / 60000} minutes
 
-  // Force like
-  if (request.url === '/like') {
-    updateAgentForAction(ACTIONS.LIKE);
-    wisdom_agent.step({ verbose: true })
-      .then(() => {
-        response.writeHead(200, {'Content-Type': 'text/plain'});
-        response.end('Like triggered');
-      })
-      .catch((err: any) => {
-        response.writeHead(500, {'Content-Type': 'text/plain'});
-        response.end('Error: ' + err.message);
-      });
-    return;
-  }
-  
-  // Default status page
-  response.writeHead(200, {'Content-Type': 'text/plain'});
-  const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
-
-  response.end(`Wisdom Bot is running
-  
-Rate Limit Status:
-- Monthly Cap Exceeded: ${monthlyCapExceeded}
+Stats:
+- Replies Today: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}
 - Daily Read Attempts: ${dailyReadAttempts}/${maxDailyReadAttempts}
+
+Rate Limits:
+- Monthly Cap Exceeded: ${monthlyCapExceeded}
 - Reset Time: ${monthlyCapResetTime ? new Date(monthlyCapResetTime * 1000).toISOString() : 'N/A'}
 
-Bot Stats:
-- Total Posts: ${totalPosts} (target: 5/day)
-- Image Posts: ${imagePosts} (${imagePostPercentage.toFixed(1)}%)
-- Text Posts: ${textPosts} (${(100 - imagePostPercentage).toFixed(1)}%)
-- Target Image %: ${IMAGE_POST_PROBABILITY * 100}%
-- Replies Today: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}
-- Posts in Cycle: ${postsInCurrentCycle}/${POSTS_PER_CYCLE}
-- Images in Cycle: ${imagesInCurrentCycle}/${IMAGES_PER_CYCLE}
+Timing:
+- Last reply: ${minutesSinceReply} minutes ago
+- Next reply: in ${minutesUntilNext} minutes
 `);
+    return;
+  }
+  
+  if (request.url === '/reply') {
+    attemptReply()
+      .then(() => {
+        response.writeHead(200, {'Content-Type': 'text/plain'});
+        response.end('Reply attempt completed');
+      })
+      .catch(err => {
+        response.writeHead(500, {'Content-Type': 'text/plain'});
+        response.end('Error: ' + err.message);
+      });
+    return;
+  }
+  
+  if (request.url === '/reset') {
+    dailyReplies = 0;
+    dailyReadAttempts = 0;
+    saveState();
+    response.writeHead(200, {'Content-Type': 'text/plain'});
+    response.end('Counters reset');
+    return;
+  }
+  
+  response.writeHead(404, {'Content-Type': 'text/plain'});
+  response.end('Not found');
 });
+
+async function runScheduler(): Promise<void> {
+  try {
+    await attemptReply();
+  } catch (error) {
+    console.error("❌ Scheduler error:", error);
+  }
+  
+  setTimeout(runScheduler, 5 * 60 * 1000);
+}
+
+async function main(): Promise<void> {
+  console.log("=========================================");
+  console.log("🚀 AIleen Reply Agent Starting...");
+  console.log("=========================================");
+  
+  loadState();
+  
+  console.log("Environment check:");
+  console.log("- API_KEY:", !!process.env.API_KEY ? "✅" : "❌");
+  console.log("- TWITTER_API_KEY:", !!process.env.TWITTER_API_KEY ? "✅" : "❌");
+  console.log(`\n📊 Config: ${REPLIES_PER_DAY_TARGET} replies/day (every ${REPLY_INTERVAL / 60000} minutes)\n`);
+  
+  try {
+    console.log("Initializing agent...");
+    await wisdom_agent.init();
+    console.log("✅ Agent initialized!");
+    
+    console.log("Initializing reply manager...");
+    await replyManager.initialize();
+    console.log("✅ Reply manager initialized!");
+  } catch (error) {
+    console.error("❌ Failed to initialize:", error);
+    process.exit(1);
+  }
+  
+  const PORT = process.env.PORT || 3000;
+  server.listen(PORT, () => {
+    console.log(`🌐 HTTP server listening on port ${PORT}`);
+  });
+  
+  console.log("⏰ Starting scheduler...");
+  runScheduler();
+  
+  console.log("✅ Reply agent running!");
+}
 
 process.on('uncaughtException', (err) => {
   console.error('Uncaught exception:', err);
   saveState();
 });
 
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled rejection:', reason);
   saveState();
 });
 
-setInterval(() => {
-  const imagePostPercentage = totalPosts > 0 ? (imagePosts / totalPosts) * 100 : 0;
-  console.log('Heartbeat check:', new Date().toISOString());
-  console.log(`📊 Stats: ${totalPosts} posts (target: 5/day), ${dailyReplies}/${REPLIES_PER_DAY_TARGET} replies`);
-  console.log(`📊 Image percentage: ${imagePostPercentage.toFixed(1)}% (target: ${IMAGE_POST_PROBABILITY * 100}%)`);
-  console.log(`📊 Cycle: ${postsInCurrentCycle}/${POSTS_PER_CYCLE} posts, ${imagesInCurrentCycle}/${IMAGES_PER_CYCLE} images`);
-}, 60000);
-
-async function main(): Promise<void> {
-  try {
-    console.log("=======================================");
-    console.log("Initializing Wisdom Twitter Bot...");
-    console.log("=======================================");
-    
-    loadState();
-    
-    console.log("Environment check:");
-    console.log("API_KEY present:", !!process.env.API_KEY);
-    console.log("TWITTER_API_KEY present:", !!process.env.TWITTER_API_KEY);
-    console.log("TOGETHER_API_KEY present:", !!process.env.TOGETHER_API_KEY);
-    console.log(`🎯 Posts: 5/day (every ${POST_INTERVAL/60000} minutes)`);
-    console.log(`📨 Replies: ${REPLIES_PER_DAY_TARGET}/day (every ${REPLY_INTERVAL/60000} minutes)`);
-    console.log(`🎯 IMAGE_POST_PROBABILITY: ${IMAGE_POST_PROBABILITY * 100}%`);
-    
-    const sanitizedDescription = wisdom_agent.description.replace(/[\uD800-\uDFFF](?![\uD800-\uDFFF])|(?:[^\uD800-\uDFFF]|^)[\uDC00-\uDFFF]/g, '');
-    wisdom_agent.description = sanitizedDescription;
-    
-    try {
-      console.log("Initializing agent...");
-      await wisdom_agent.init();
-      console.log("Agent initialization successful!");
-      
-      console.log("\n=== TWITTER PLUGIN FUNCTIONS ===");
-      const twitterWorker = wisdom_agent.workers.find(w => w.id === "wisdom_twitter_worker");
-      if (twitterWorker) {
-        console.log("Functions:", JSON.stringify(twitterWorker.functions.map(f => ({
-          name: f.name,
-          description: f.description,
-          args: f.args
-        })), null, 2));
-      } else {
-        console.log("❌ Twitter worker not found!");
-      }
-      console.log("================================\n");
-      
-      console.log("Initializing reply manager...");
-      await replyManager.initialize();
-      console.log("Reply manager initialization successful!");
-      
-      console.log("Available functions:", wisdom_agent.workers.flatMap((w: any) =>
-        w.functions.map((f: any) => f.name)
-      ).join(", "));
-    } catch (initError) {
-      console.error("Failed to initialize agent:", initError);
-      throw initError;
-    }
-    
-    const PORT = process.env.PORT || 3000;
-    server.listen(PORT, () => {
-      console.log(`HTTP server listening on port ${PORT}`);
-    });
-
-    console.log("Starting agent scheduler...");
-    
-    console.log("Forcing immediate first post...");
-    
-    const forceWithImage = Math.random() <= IMAGE_POST_PROBABILITY;
-    const initialAction = forceWithImage ? ACTIONS.POST : ACTIONS.POST_NO_IMAGE;
-    
-    console.log(`🚀 Forcing initial ${initialAction} action (${forceWithImage ? 'with' : 'without'} image)...`);
-    updateAgentForAction(initialAction);
-    try {
-      await wisdom_agent.step({ verbose: true });
-      console.log("✅ Force post successful");
-      lastPostTime = Date.now();
-      totalPosts++;
-      if (initialAction === ACTIONS.POST) {
-        imagePosts++;
-        imagesInCurrentCycle++;
-      } else {
-        textPosts++;
-      }
-      postsInCurrentCycle++;
-      saveState();
-    } catch (err) {
-      console.error("❌ Force post failed:", err);
-    }
-      
-    setTimeout(() => {
-      console.log("Starting regular scheduler");
-      runAgentWithSchedule();
-    }, 60000);
-    
-    console.log("Bot initialization complete!");
-    
-  } catch (error) {
-    console.error("ERROR in main function:", error);
-    
-    console.log("Will attempt restart in 60 seconds despite error");
-    setTimeout(() => {
-      console.log("Attempting to restart agent scheduler...");
-      runAgentWithSchedule();
-    }, 60000);
-  }
-}
-
-console.log("Starting bot process", new Date().toISOString());
 main().catch(err => {
-  console.error("Fatal error in main promise chain:", err);
+  console.error("Fatal error:", err);
+  process.exit(1);
 });

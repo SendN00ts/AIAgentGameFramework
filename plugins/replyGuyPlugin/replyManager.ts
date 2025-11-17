@@ -3,6 +3,7 @@ import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
 import * as fs from 'fs';
 import * as path from 'path';
+import { TwitterApi } from '@virtuals-protocol/game-twitter-node';
 
 dotenv.config();
 
@@ -12,6 +13,13 @@ let repliedTweets: Record<string, number> = {};
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!
+});
+
+const twitterClient = new TwitterApi({
+  appKey: process.env.TWITTER_API_KEY!,
+  appSecret: process.env.TWITTER_API_SECRET!,
+  accessToken: process.env.TWITTER_ACCESS_TOKEN!,
+  accessSecret: process.env.TWITTER_ACCESS_SECRET!,
 });
 
 const replyGuyWorker = createReplyGuyWorker(
@@ -53,6 +61,23 @@ function ensureDirExists(dir: string) {
   }
 }
 
+function shouldSkipTweet(tweet: any): boolean {
+  const text = tweet.text?.toLowerCase() || '';
+  
+  const politicalKeywords = ['trump', 'biden', 'election', 'vote', 'congress', 'senate', 'democrat', 'republican', 'politics', 'political'];
+  const sexualKeywords = ['sex', 'porn', 'nsfw', 'onlyfans', 'xxx', 'adult content'];
+  
+  const hasPolitical = politicalKeywords.some(keyword => text.includes(keyword));
+  const hasSexual = sexualKeywords.some(keyword => text.includes(keyword));
+  
+  if (hasPolitical || hasSexual) {
+    console.log(`⏭️ Skipping tweet (filtered content): ${tweet.id}`);
+    return true;
+  }
+  
+  return false;
+}
+
 async function findAndReply(category: string = 'random') {
   console.log(`⏱️ Running scheduled reply check for category: ${category}`);
   
@@ -71,6 +96,15 @@ async function findAndReply(category: string = 'random') {
     
     if (repliedTweets[accountInfo.tweet_id]) {
       console.log(`Already replied to tweet ${accountInfo.tweet_id}, skipping`);
+      return;
+    }
+
+    // Fetch tweet to check content
+    const tweetData = await twitterClient.v2.singleTweet(accountInfo.tweet_id, {
+      'tweet.fields': ['text']
+    });
+    
+    if (shouldSkipTweet(tweetData.data)) {
       return;
     }
     
