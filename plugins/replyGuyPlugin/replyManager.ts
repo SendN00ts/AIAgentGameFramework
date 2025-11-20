@@ -111,16 +111,21 @@ async function findAndReply(category: string = 'random') {
     console.log('Generating reply content with OpenAI...');
     
     try {
-      const response = await openai.chat.completions.create({
-        model: "gpt-4o",
-        max_tokens: 150,
-        messages: [{
-          role: "user",
-          content: `Reply to @${accountInfo.handle}'s tweet: "${accountInfo.tweet_text}"
+const response = await openai.chat.completions.create({
+  model: "gpt-4o",
+  max_tokens: 150,
+  messages: [{
+    role: "user",
+    content: `Reply to @${accountInfo.handle}'s tweet: "${accountInfo.tweet_text}"
 
-Write a specific, conversational reply (1-2 sentences, no hashtags). Reference what they actually said, not generic themes.`
-        }]
-      });
+Write a specific, conversational reply (1-2 sentences, no hashtags). Reference what they actually said, not generic themes.
+
+IMPORTANT: 
+- Do NOT use "I", "me", "my" or first-person language
+- Write from a neutral, objective perspective
+- Share wisdom or insights directly without personal framing`
+  }]
+});
 
       let replyContent = response.choices[0].message.content?.trim() || '';
       
