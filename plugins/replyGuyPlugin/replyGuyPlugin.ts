@@ -156,9 +156,8 @@ export function createReplyGuyWorker(
             
             console.log(`📥 Fetching latest tweet for ${username}`);
             const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
-              max_results: 1,
-              "tweet.fields": ["created_at", "text"]
-            });
+  max_results: 1
+});
             
             if (!tweetsResponse.data || tweetsResponse.data.data.length === 0) {
               console.log(`⚠️ No tweets found for ${username}, skipping`);
