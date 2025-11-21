@@ -118,7 +118,7 @@ const response = await openai.chat.completions.create({
     role: "user",
     content: `Reply to @${accountInfo.handle}'s tweet: "${accountInfo.tweet_text}"
 
-Write a specific, conversational but human like reply (1-2 sentences, no hashtags). Reference what they actually said, not generic themes.
+Write a specific, conversational and human like reply (1-2 sentences, no hashtags). Reference what they actually said, not generic themes.
 
 IMPORTANT: 
 - Do NOT use "I", "me", "my" or first-person language
