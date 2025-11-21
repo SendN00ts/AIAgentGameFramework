@@ -155,16 +155,17 @@ export function createReplyGuyWorker(
             }
             
             console.log(`📥 Fetching latest tweet for ${username}`);
-            const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
-  max_results: 1
-});
+            // Use search instead of userTimeline (Basic tier compatible)
+            const tweetsResponse = await twitterClient.v2.search(`from:${username}`, {
+              max_results: 5
+            });
             
-            if (!tweetsResponse.data || tweetsResponse.data.data.length === 0) {
-              console.log(`⚠️ No tweets found for ${username}, skipping`);
-              continue;
-            }
-            
-            const latestTweet = tweetsResponse.data.data[0];
+   if (!tweetsResponse.data || (tweetsResponse.data as any).length === 0) {
+  console.log(`⚠️ No tweets found for ${username}, skipping`);
+  continue;
+}
+
+const latestTweet = (tweetsResponse.data as any)[0];
             
             // Validate tweet age
             if (latestTweet.created_at) {
