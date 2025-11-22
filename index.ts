@@ -230,9 +230,9 @@ async function main(): Promise<void> {
   console.log(`\n📊 Config: ${REPLIES_PER_DAY_TARGET} replies/day (every ${REPLY_INTERVAL / 60000} minutes)\n`);
   
   try {
-    console.log("Initializing agent...");
-    await wisdom_agent.init();
-    console.log("✅ Agent initialized!");
+   // console.log("Initializing agent...");
+   // await wisdom_agent.init();
+  //  console.log("✅ Agent initialized!");
     
     console.log("Initializing reply manager...");
     await replyManager.initialize();
