@@ -78,6 +78,8 @@ function shouldSkipTweet(tweet: any): boolean {
   return false;
 }
 
+
+
 async function findAndReply(category: string = 'random') {
   console.log(`⏱️ Running scheduled reply check for category: ${category}`);
   

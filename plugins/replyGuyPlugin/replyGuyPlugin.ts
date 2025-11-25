@@ -184,6 +184,21 @@ export function createReplyGuyWorker(
                   `Account ${username} hasn't tweeted recently (last tweet: ${tweetDate.toDateString()})`
                 );
               }
+              const SKIP_LOG_FILE = '/app/data/skipped_accounts.json';
+
+// After each skip, append to file:
+const skipReason = {
+  username,
+  reason: "inactive/link-heavy/etc",
+  timestamp: Date.now()
+};
+
+let skipLog = [];
+if (fs.existsSync(SKIP_LOG_FILE)) {
+  skipLog = JSON.parse(fs.readFileSync(SKIP_LOG_FILE, 'utf8'));
+}
+skipLog.push(skipReason);
+fs.writeFileSync(SKIP_LOG_FILE, JSON.stringify(skipLog, null, 2));
             } catch (e) {
               console.log(`⚠️ Invalid date for latest tweet from ${username}`);
             }
