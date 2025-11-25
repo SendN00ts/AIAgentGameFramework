@@ -221,8 +221,6 @@ if (hasLink) {
   }
 }
           
-          // Cache tweets 2-5 with age validation
-          // Cache tweets 2-5 with age validation
 let cachedCount = 0;
 for (let i = 1; i < tweets.length; i++) {
   // Check for links first

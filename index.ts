@@ -202,6 +202,31 @@ Timing:
     response.end('Counters reset');
     return;
   }
+
+  if (request.url === '/clear-cache') {
+  // Clear tweet cache in replyGuyPlugin
+  // Add export in plugin: export function clearCache() { tweetCache = []; }
+  response.writeHead(200, {'Content-Type': 'text/plain'});
+  response.end('Cache cleared');
+  return;
+}
+
+if (request.url === '/skipped') {
+  try {
+    if (fs.existsSync('/app/data/skipped_accounts.json')) {
+      const skipLog = fs.readFileSync('/app/data/skipped_accounts.json', 'utf8');
+      response.writeHead(200, {'Content-Type': 'application/json'});
+      response.end(skipLog);
+    } else {
+      response.writeHead(200, {'Content-Type': 'application/json'});
+      response.end('[]');
+    }
+  } catch (error) {
+    response.writeHead(500, {'Content-Type': 'text/plain'});
+    response.end('Error reading skip log');
+  }
+  return;
+}
   
   response.writeHead(404, {'Content-Type': 'text/plain'});
   response.end('Not found');
