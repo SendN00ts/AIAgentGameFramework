@@ -228,14 +228,19 @@ if (request.url === '/skipped') {
   return;
 }
 
-if (request.url === 'reset-skipped') {
+if (request.url === '/reset-skipped') {
   const skipFilePath = '/app/data/skipped_accounts.json';
+  
   if (fs.existsSync(skipFilePath)) {
     fs.unlinkSync(skipFilePath);
     console.log('✅ Skipped accounts log cleared');
   } else {
     console.log('⚠️ No skipped accounts log found');
   }
+
+  response.writeHead(200, {'Content-Type': 'text/plain'});
+  response.end('Skipped accounts reset');
+  return;
 }
   
   response.writeHead(404, {'Content-Type': 'text/plain'});
