@@ -1,8 +1,8 @@
 import { createReplyGuyWorker } from './replyGuyPlugin';
 import OpenAI from 'openai';
 import * as dotenv from 'dotenv';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { TwitterApi } from '@virtuals-protocol/game-twitter-node';
 
 dotenv.config();
