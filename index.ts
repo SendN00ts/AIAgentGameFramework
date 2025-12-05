@@ -1,7 +1,7 @@
 import { wisdom_agent } from './agent';
-import * as http from 'http';
-import * as fs from 'fs';
-import * as path from 'path';
+import * as http from 'node:http';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
 
 const REPLIES_PER_DAY_TARGET = 90;
