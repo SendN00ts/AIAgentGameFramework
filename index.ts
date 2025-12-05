@@ -228,7 +228,7 @@ if (request.url === '/skipped') {
   return;
 }
 
-/*
+
 if (request.url === '/reset-skipped') {
   const skipFilePath = '/app/data/skipped_accounts.json';
   
@@ -243,7 +243,6 @@ if (request.url === '/reset-skipped') {
   response.end('Skipped accounts reset');
   return;
 }
-*/
   
   response.writeHead(404, {'Content-Type': 'text/plain'});
   response.end('Not found');
