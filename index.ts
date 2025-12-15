@@ -3,8 +3,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
 
-const REPLIES_PER_DAY_TARGET = 90;
-const REPLY_INTERVAL = 16 * 60 * 1000; // 16 minutes
+const REPLIES_PER_DAY_TARGET = 85;
+const REPLY_INTERVAL = 17 * 60 * 1000; // 16 minutes
 
 let lastReplyTime = 0;
 let dailyReplies = 0;
