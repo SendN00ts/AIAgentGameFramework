@@ -114,7 +114,7 @@ async function findAndReply(category: string = 'random') {
     
     try {
 const response = await openai.chat.completions.create({
-  model: "gpt-4o",
+  model: "gpt-5.2",
   max_tokens: 150,
   messages: [{
     role: "user",
