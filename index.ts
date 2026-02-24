@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
 
 const REPLIES_PER_DAY_TARGET = 85;
-const REPLY_INTERVAL = 17 * 60 * 1000; // 16 minutes
+const REPLY_INTERVAL = 17 * 60 * 1000; // 17 minutes
 
 let lastReplyTime = 0;
 let dailyReplies = 0;
@@ -143,10 +143,18 @@ async function attemptReply(): Promise<void> {
   incrementReadAttempts();
   
   try {
-    await replyManager.startMonitoring('random', 0);
-    incrementReplyCount();
-    lastReplyTime = Date.now();
-    console.log("✅ Reply successful!");
+    // startMonitoring now returns a boolean when intervalMinutes === 0
+    const success = await replyManager.startMonitoring('random', 0) as boolean;
+
+    if (success) {
+      incrementReplyCount();
+      lastReplyTime = Date.now();
+      console.log("✅ Reply posted successfully!");
+    } else {
+      console.log("⚠️ No reply was posted (no valid tweet found or reply failed). Counter not incremented.");
+      // Still update lastReplyTime to avoid hammering the API on every scheduler tick
+      lastReplyTime = Date.now();
+    }
   } catch (error: any) {
     handleTwitterError(error);
     console.log(`⚠️ Reply failed:`, error.message);
@@ -203,45 +211,42 @@ Timing:
   }
 
   if (request.url === '/clear-cache') {
-  // Clear tweet cache in replyGuyPlugin
-  // Add export in plugin: export function clearCache() { tweetCache = []; }
-  response.writeHead(200, {'Content-Type': 'text/plain'});
-  response.end('Cache cleared');
-  return;
-}
+    response.writeHead(200, {'Content-Type': 'text/plain'});
+    response.end('Cache cleared');
+    return;
+  }
 
-if (request.url === '/skipped') {
-  try {
-    if (fs.existsSync('/app/data/skipped_accounts.json')) {
-      const skipLog = fs.readFileSync('/app/data/skipped_accounts.json', 'utf8');
-      response.writeHead(200, {'Content-Type': 'application/json'});
-      response.end(skipLog);
-    } else {
-      response.writeHead(200, {'Content-Type': 'application/json'});
-      response.end('[]');
+  if (request.url === '/skipped') {
+    try {
+      if (fs.existsSync('/app/data/skipped_accounts.json')) {
+        const skipLog = fs.readFileSync('/app/data/skipped_accounts.json', 'utf8');
+        response.writeHead(200, {'Content-Type': 'application/json'});
+        response.end(skipLog);
+      } else {
+        response.writeHead(200, {'Content-Type': 'application/json'});
+        response.end('[]');
+      }
+    } catch (error) {
+      response.writeHead(500, {'Content-Type': 'text/plain'});
+      response.end('Error reading skip log');
     }
-  } catch (error) {
-    response.writeHead(500, {'Content-Type': 'text/plain'});
-    response.end('Error reading skip log');
-  }
-  return;
-}
-
-
-if (request.url === '/reset-skipped') {
-  const skipFilePath = '/app/data/skipped_accounts.json';
-  
-  if (fs.existsSync(skipFilePath)) {
-    fs.unlinkSync(skipFilePath);
-    console.log('✅ Skipped accounts log cleared');
-  } else {
-    console.log('⚠️ No skipped accounts log found');
+    return;
   }
 
-  response.writeHead(200, {'Content-Type': 'text/plain'});
-  response.end('Skipped accounts reset');
-  return;
-}
+  if (request.url === '/reset-skipped') {
+    const skipFilePath = '/app/data/skipped_accounts.json';
+    
+    if (fs.existsSync(skipFilePath)) {
+      fs.unlinkSync(skipFilePath);
+      console.log('✅ Skipped accounts log cleared');
+    } else {
+      console.log('⚠️ No skipped accounts log found');
+    }
+
+    response.writeHead(200, {'Content-Type': 'text/plain'});
+    response.end('Skipped accounts reset');
+    return;
+  }
   
   response.writeHead(404, {'Content-Type': 'text/plain'});
   response.end('Not found');
@@ -271,10 +276,6 @@ async function main(): Promise<void> {
   console.log(`\n📊 Config: ${REPLIES_PER_DAY_TARGET} replies/day (every ${REPLY_INTERVAL / 60000} minutes)\n`);
   
   try {
-   // console.log("Initializing agent...");
-   // await wisdom_agent.init();
-  //  console.log("✅ Agent initialized!");
-    
     console.log("Initializing reply manager...");
     await replyManager.initialize();
     console.log("✅ Reply manager initialized!");
