@@ -7,10 +7,6 @@ import { TwitterApi } from '@virtuals-protocol/game-twitter-node';
 
 dotenv.config();
 
-const REPLY_FILE_PATH = '/app/data/replied_tweets.json';
-
-let repliedTweets: Record<string, number> = {};
-
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY!
 });
@@ -28,38 +24,6 @@ const replyGuyWorker = createReplyGuyWorker(
   process.env.TWITTER_ACCESS_TOKEN as string,
   process.env.TWITTER_ACCESS_SECRET as string
 );
-
-function loadRepliedTweets() {
-  try {
-    if (fs.existsSync(REPLY_FILE_PATH)) {
-      const data = fs.readFileSync(REPLY_FILE_PATH, 'utf8');
-      repliedTweets = JSON.parse(data);
-      console.log(`Loaded ${Object.keys(repliedTweets).length} replied tweets from file`);
-    } else {
-      console.log('No replied tweets file found, starting fresh');
-      ensureDirExists(path.dirname(REPLY_FILE_PATH));
-      saveRepliedTweets();
-    }
-  } catch (error) {
-    console.error('Error loading replied tweets:', error);
-    repliedTweets = {};
-  }
-}
-
-function saveRepliedTweets() {
-  try {
-    fs.writeFileSync(REPLY_FILE_PATH, JSON.stringify(repliedTweets, null, 2));
-    console.log(`Saved ${Object.keys(repliedTweets).length} replied tweets to file`);
-  } catch (error) {
-    console.error('Error saving replied tweets:', error);
-  }
-}
-
-function ensureDirExists(dir: string) {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-  }
-}
 
 function shouldSkipTweet(tweet: any): boolean {
   const text = tweet.text?.toLowerCase() || '';
@@ -96,10 +60,7 @@ async function findAndReply(category: string = 'random') {
     const accountInfo = JSON.parse(findResult.feedback);
     console.log(`Found account: ${accountInfo.handle} with tweet: ${accountInfo.tweet_id}`);
     
-    if (repliedTweets[accountInfo.tweet_id]) {
-      console.log(`Already replied to tweet ${accountInfo.tweet_id}, skipping`);
-      return;
-    }
+    // Removed duplicate replied tweet check here
 
     // Fetch tweet to check content
     const tweetData = await twitterClient.v2.singleTweet(accountInfo.tweet_id, {
@@ -115,7 +76,7 @@ async function findAndReply(category: string = 'random') {
     try {
 const response = await openai.chat.completions.create({
   model: "gpt-5.2",
-  max_tokens: 150,
+  max_completion_tokens: 150,
   messages: [{
     role: "user",
     content: `Reply to @${accountInfo.handle}'s tweet: "${accountInfo.tweet_text}"
@@ -175,8 +136,7 @@ IMPORTANT:
       
       console.log('Reply posted successfully:', replyResult.feedback);
       
-      repliedTweets[accountInfo.tweet_id] = Date.now();
-      saveRepliedTweets();
+      // Removed saving replied tweet after success
       
     } catch (error) {
       console.error('Error generating or posting reply:', error);
@@ -190,12 +150,10 @@ IMPORTANT:
 export function startMonitoring(category: string = 'random', intervalMinutes: number = 0) {
   if (intervalMinutes === 0) {
     console.log(`🔄 Running one-time reply for category: ${category}`);
-    loadRepliedTweets();
     return findAndReply(category);
   }
   
   console.log(`🔄 Starting monitoring for category: ${category} every ${intervalMinutes} minutes`);
-  loadRepliedTweets();
   findAndReply(category);
   
   return setInterval(() => {

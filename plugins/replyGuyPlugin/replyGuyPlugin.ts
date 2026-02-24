@@ -22,6 +22,34 @@ const accountCache: Map<string, CachedAccount> = new Map();
 const tweetCache: CachedTweet[] = [];
 const CACHE_TTL = 24 * 60 * 60 * 1000;
 
+const FULL_SCAN_INTERVAL = 24 * 60 * 60 * 1000; // once per day
+let lastFullScanTime = 0;
+
+const REPLIED_TWEETS_FILE = path.resolve(process.cwd(), 'data/replied_tweets.json');
+let repliedTweetIds: Set<string> = new Set();
+
+function loadRepliedTweets(): void {
+  try {
+    if (fs.existsSync(REPLIED_TWEETS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(REPLIED_TWEETS_FILE, 'utf8'));
+      repliedTweetIds = new Set(Array.isArray(data) ? data : []);
+      console.log(`📂 Loaded ${repliedTweetIds.size} replied tweet IDs`);
+    }
+  } catch (err) {
+    console.log('⚠️ Could not load replied tweets file');
+  }
+}
+
+function saveRepliedTweets(): void {
+  try {
+    const dir = path.dirname(REPLIED_TWEETS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(REPLIED_TWEETS_FILE, JSON.stringify(Array.from(repliedTweetIds), null, 2));
+  } catch (err) {
+    console.log('⚠️ Could not save replied tweets file');
+  }
+}
+
 interface TargetAccount {
   handle: string;
   description: string;
@@ -43,6 +71,8 @@ export function createReplyGuyWorker(
     accessToken: accessToken,
     accessSecret: accessSecret,
   });
+
+  loadRepliedTweets();
 
   function containsHashtags(text?: string): boolean {
     return Boolean(text && text.includes('#'));
@@ -128,168 +158,92 @@ export function createReplyGuyWorker(
           );
         }
 
-        const randomAccount = accounts[Math.floor(Math.random() * accounts.length)];
-        if (logger) logger(`Selected account: ${randomAccount.handle}`);
-        console.log(`🎯 Selected target account: ${randomAccount.handle}`);
+        const now = Date.now();
 
-        const username = randomAccount.handle.replace('@', '');
+        // Only perform full scan once per day
+        if (now - lastFullScanTime < FULL_SCAN_INTERVAL) {
+          console.log("⏳ Full scan already performed in last 24h. Using cache only.");
+        } else {
+          console.log(`🔎 Performing DAILY full scan of ${accounts.length} target accounts`);
+          lastFullScanTime = now;
 
-        // Validate username length
-        if (username.length > 15) {
-          console.log(`⚠️ Username too long: ${username} (${username.length} chars)`);
-          return new ExecutableGameFunctionResponse(
-            ExecutableGameFunctionStatus.Failed,
-            `Username exceeds 15 character limit: ${username}`
-          );
-        }
-        
-        try {
-          const userId = await getUserId(username);
-          if (!userId) {
-            return new ExecutableGameFunctionResponse(
-              ExecutableGameFunctionStatus.Failed,
-              `Could not find user: ${username}`
-            );
-          }
-          
-          console.log(`📥 Fetching 5 tweets for ${username}`);
-          const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
-            max_results: 5,
-            "tweet.fields": ["created_at", "text"]
-          });
-          
-          if (!tweetsResponse.data || tweetsResponse.data.data.length === 0) {
-            return new ExecutableGameFunctionResponse(
-              ExecutableGameFunctionStatus.Failed,
-              `No tweets found: ${username}`
-            );
-          }
-          
-          const tweets = tweetsResponse.data.data;
           const threeMonthsAgo = new Date();
           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-          
-          // Validate first tweet age
-          const latestTweet = tweets[0];
-          
-          if (latestTweet.created_at) {
+
+          for (const account of accounts) {
+            const username = account.handle.replace('@', '');
+
+            if (username.length > 15) continue;
+
+            const userId = await getUserId(username);
+            if (!userId) continue;
+
             try {
-              const tweetDate = new Date(latestTweet.created_at);
-              if (isNaN(tweetDate.getTime())) throw new Error("Invalid date");
-              
-              if (tweetDate < threeMonthsAgo) {
-                console.log(`⏭️ Skipping inactive account ${username} - last tweet from ${tweetDate.toISOString()}`);
-                return new ExecutableGameFunctionResponse(
-                  ExecutableGameFunctionStatus.Failed,
-                  `Account ${username} hasn't tweeted recently (last tweet: ${tweetDate.toDateString()})`
-                );
+              const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
+                max_results: 1,
+                "tweet.fields": ["created_at", "text"]
+              });
+
+              if (!tweetsResponse.data || tweetsResponse.data.data.length === 0) continue;
+
+              const latestTweet = tweetsResponse.data.data[0];
+
+              // Skip already replied tweets
+              if (repliedTweetIds.has(latestTweet.id)) continue;
+
+              if (latestTweet.created_at) {
+                const tweetDate = new Date(latestTweet.created_at);
+                if (isNaN(tweetDate.getTime()) || tweetDate < threeMonthsAgo) continue;
               }
-              const SKIP_LOG_FILE = '/app/data/skipped_accounts.json';
 
-// After each skip, append to file:
-const skipReason = {
-  username,
-  reason: "inactive/link-heavy/etc",
-  timestamp: Date.now()
-};
+              const hasLink = latestTweet.text && (
+                latestTweet.text.includes('http://') ||
+                latestTweet.text.includes('https://') ||
+                latestTweet.text.includes('t.co/')
+              );
 
-let skipLog = [];
-if (fs.existsSync(SKIP_LOG_FILE)) {
-  skipLog = JSON.parse(fs.readFileSync(SKIP_LOG_FILE, 'utf8'));
-}
-skipLog.push(skipReason);
-fs.writeFileSync(SKIP_LOG_FILE, JSON.stringify(skipLog, null, 2));
-            } catch (e) {
-              console.log(`⚠️ Invalid date for latest tweet from ${username}`);
+              if (hasLink) continue;
+
+              tweetCache.push({
+                userId: userId,
+                username: username,
+                handle: account.handle,
+                description: account.description || "Wellness and mindfulness account",
+                category: "all",
+                tweet: latestTweet
+              });
+
+            } catch (err) {
+              console.log(`⚠️ Error scanning ${username}, skipping`);
+              continue;
             }
           }
-          
-const hasLink = latestTweet.text && (
-  latestTweet.text.includes('http://') || 
-  latestTweet.text.includes('https://') ||
-  latestTweet.text.includes('t.co/')
-);
 
-if (hasLink) {
-  const textWithoutLinks = latestTweet.text.replace(/https?:\/\/\S+/g, '').trim();
-  if (textWithoutLinks.length < 50) {
-    console.log(`⏭️ Skipping tweet with link and minimal text: ${username}`);
-    return new ExecutableGameFunctionResponse(
-      ExecutableGameFunctionStatus.Failed,
-      `Tweet contains link with minimal context`
-    );
-  }
-}
-          
-let cachedCount = 0;
-for (let i = 1; i < tweets.length; i++) {
-  // Check for links first
-  const hasLink = tweets[i].text && (
-    tweets[i].text.includes('http://') || 
-    tweets[i].text.includes('https://') ||
-    tweets[i].text.includes('t.co/')
-  );
-  
-  if (hasLink) {
-    console.log(`⏭️ Skipping tweet with link from ${username}`);
-    continue;
-  }
-  
-  if (tweets[i].created_at) {
-    try {
-      const tweetDate = new Date(tweets[i].created_at!);
-      if (!isNaN(tweetDate.getTime()) && tweetDate >= threeMonthsAgo) {
-        tweetCache.push({
-          userId: userId,
-          username: username,
-          handle: randomAccount.handle,
-          description: randomAccount.description || "Wellness and mindfulness account",
-          category: "all",
-          tweet: tweets[i]
-        });
-        cachedCount++;
-      } else {
-        console.log(`⏭️ Skipping old tweet from ${username}: ${tweetDate.toISOString()}`);
-      }
-    } catch (e) {
-      console.log(`⚠️ Invalid date for tweet from ${username}, skipping cache`);
-    }
-  } else {
-    // Cache tweets without dates
-    tweetCache.push({
-      userId: userId,
-      username: username,
-      handle: randomAccount.handle,
-      description: randomAccount.description || "Wellness and mindfulness account",
-      category: "all",
-      tweet: tweets[i]
-    });
-    cachedCount++;
-  }
-}
-          
-          console.log(`💾 Cached ${cachedCount} recent tweets (${tweetCache.length} total in cache)`);
-          
-          return new ExecutableGameFunctionResponse(
-            ExecutableGameFunctionStatus.Done,
-            JSON.stringify({
-              handle: randomAccount.handle,
-              username: username,
-              description: randomAccount.description || "Wellness and mindfulness account",
-              category: "all",
-              tweet_id: latestTweet.id,
-              tweet_text: latestTweet.text,
-              tweet_created_at: latestTweet.created_at || "unknown"
-            })
-          );
-          
-        } catch (error: any) {
-          console.error('Error fetching tweets:', error);
+          console.log(`📦 Daily scan complete. Cached ${tweetCache.length} tweets.`);
+        }
+
+        if (tweetCache.length === 0) {
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            `Error: ${error.message}`
+            "No recent tweets found across target accounts."
           );
         }
+
+        const nextTweet = tweetCache.shift()!;
+
+        return new ExecutableGameFunctionResponse(
+          ExecutableGameFunctionStatus.Done,
+          JSON.stringify({
+            handle: nextTweet.handle,
+            username: nextTweet.username,
+            description: nextTweet.description,
+            category: nextTweet.category,
+            tweet_id: nextTweet.tweet.id,
+            tweet_text: nextTweet.tweet.text,
+            tweet_created_at: nextTweet.tweet.created_at || "unknown"
+          })
+        );
+          
       } catch (error: any) {
         console.error('Error in find_target_account:', error);
         return new ExecutableGameFunctionResponse(
@@ -366,6 +320,8 @@ for (let i = 1; i < tweets.length; i++) {
         }
         
         console.log("✅ Reply posted successfully with ID:", replyResponse.data.id);
+        repliedTweetIds.add(tweet_id);
+        saveRepliedTweets();
         if (logger) logger(`Reply posted successfully with ID: ${replyResponse.data.id}`);
         
         return new ExecutableGameFunctionResponse(
