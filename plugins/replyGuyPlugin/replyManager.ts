@@ -105,9 +105,11 @@ async function findAndReply(category: string = 'random'): Promise<boolean> {
       'tweet.fields': ['text']
     });
     
-    if (shouldSkipTweet(tweetData.data)) {
-      return false;
-    }
+   console.log(`📄 Tweet text: "${tweetData.data?.text}"`);
+if (shouldSkipTweet(tweetData.data)) {
+  return false;
+}
+console.log('✅ Tweet passed content filter');
     
     console.log('Generating reply content with OpenAI...');
     
