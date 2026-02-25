@@ -314,7 +314,22 @@ export function createReplyGuyWorker(
         console.log(`📝 Replying to tweet ${tweet_id} with: ${reply_text}`);
         if (logger) logger(`Replying to tweet ${tweet_id}`);
         
-        const replyResponse = await twitterClient.v2.reply(reply_text, tweet_id);
+        let replyResponse;
+        try {
+          replyResponse = await twitterClient.v2.reply(reply_text, tweet_id);
+        } catch (replyError: any) {
+          // 403 restricted reply — mark as done so we never retry
+          if (replyError?.code === 403) {
+            console.log(`⏭️ Tweet ${tweet_id} has restricted replies, marking as seen`);
+            repliedTweetIds.add(tweet_id);
+            saveRepliedTweets();
+            return new ExecutableGameFunctionResponse(
+              ExecutableGameFunctionStatus.Failed,
+              `403 Reply restricted: ${replyError.message}`
+            );
+          }
+          throw replyError;
+        }
         
         if (!replyResponse.data) {
           return new ExecutableGameFunctionResponse(

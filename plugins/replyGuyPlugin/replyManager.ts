@@ -28,14 +28,24 @@ const replyGuyWorker = createReplyGuyWorker(
 function shouldSkipTweet(tweet: any): boolean {
   const text = tweet.text?.toLowerCase() || '';
   
-  const politicalKeywords = ['trump', 'biden', 'election', 'vote', 'congress', 'senate', 'democrat', 'republican', 'politics', 'political'];
-  const sexualKeywords = ['sex', 'porn', 'nsfw', 'onlyfans', 'xxx', 'adult content'];
+  const filteredKeywords = [
+    // Political
+    'trump', 'biden', 'election', 'vote', 'congress', 'senate', 'democrat', 'republican', 'politics', 'political',
+    // Sexual
+    'sex', 'porn', 'nsfw', 'onlyfans', 'xxx', 'adult content',
+    // Controversy / allegations
+    'abuse', 'assault', 'harassment', 'allegation', 'lawsuit', 'accused', 'victim', 'misconduct',
+    'rape', 'molest', 'predator', 'grooming', 'scandal', 'controversy',
+    // Sensitive topics
+    'suicide', 'self-harm', 'overdose', 'death', 'murder', 'shooting', 'war', 'genocide',
+    'racist', 'racism', 'discrimination', 'hate crime'
+  ];
   
-  const hasPolitical = politicalKeywords.some(keyword => text.includes(keyword));
-  const hasSexual = sexualKeywords.some(keyword => text.includes(keyword));
+  const hasFiltered = filteredKeywords.some(keyword => text.includes(keyword));
   
-  if (hasPolitical || hasSexual) {
-    console.log(`⏭️ Skipping tweet (filtered content): ${tweet.id}`);
+  if (hasFiltered) {
+    const matched = filteredKeywords.find(keyword => text.includes(keyword));
+    console.log(`⏭️ Skipping tweet (filtered: "${matched}"): ${tweet.id}`);
     return true;
   }
   
@@ -72,7 +82,7 @@ async function findAndReply(category: string = 'random'): Promise<boolean> {
     
     try {
       const response = await openai.chat.completions.create({
-        model: "gpt-5.2",
+        model: "gpt-4o",
         max_completion_tokens: 150,
         messages: [{
           role: "user",
@@ -127,7 +137,12 @@ IMPORTANT:
         }, (msg: string) => console.log(`[Reply Tweet] ${msg}`));
       
       if (!replyResult || replyResult.status !== 'done') {
-        console.error('Failed to post reply:', replyResult?.feedback || 'Unknown error');
+        const feedback = replyResult?.feedback || 'Unknown error';
+        // 403 restricted reply - mark tweet as replied so we don't retry it
+        if (feedback.includes('403') || feedback.includes('not allowed')) {
+          console.log(`⏭️ Reply restricted on tweet ${accountInfo.tweet_id}, marking as skipped`);
+        }
+        console.error('Failed to post reply:', feedback);
         return false;
       }
       
