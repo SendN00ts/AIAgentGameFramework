@@ -188,13 +188,24 @@ Timing:
     return;
   }
   
-  if (request.url === '/reply') {
+  if (request.url === '/reply' || request.url === '/reply?force=true') {
+    const force = request.url.includes('force=true');
+    const originalLastReplyTime = lastReplyTime;
+    if (force) {
+      console.log('⚡ Force reply triggered via HTTP');
+      lastReplyTime = 0; // bypass interval check
+    }
     attemptReply()
       .then(() => {
+        if (force && lastReplyTime === 0) {
+          // restore if nothing was posted (attemptReply didn't update it)
+          lastReplyTime = originalLastReplyTime;
+        }
         response.writeHead(200, {'Content-Type': 'text/plain'});
-        response.end('Reply attempt completed');
+        response.end(force ? 'Force reply attempt completed' : 'Reply attempt completed');
       })
       .catch(err => {
+        if (force) lastReplyTime = originalLastReplyTime;
         response.writeHead(500, {'Content-Type': 'text/plain'});
         response.end('Error: ' + err.message);
       });
