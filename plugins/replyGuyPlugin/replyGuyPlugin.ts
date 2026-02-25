@@ -182,13 +182,17 @@ export function createReplyGuyWorker(
             try {
               const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
                 max_results: 5,
-                "tweet.fields": ["created_at", "text"],
+                "tweet.fields": ["created_at", "text", "reply_settings"],
                 exclude: ["retweets", "replies"]
               });
 
               if (!tweetsResponse.data?.data || tweetsResponse.data.data.length === 0) continue;
 
-              const latestTweet = tweetsResponse.data.data[0];
+              // Find first tweet that allows everyone to reply
+              const latestTweet = tweetsResponse.data.data.find(
+                t => !t.reply_settings || t.reply_settings === 'everyone'
+              );
+              if (!latestTweet) continue;
 
               // Skip already replied tweets
               if (repliedTweetIds.has(latestTweet.id)) continue;
