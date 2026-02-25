@@ -181,14 +181,16 @@ export function createReplyGuyWorker(
 
           console.log(`🔍 reply_settings for ${username}:`, tweets.map(t => `${t.id}:${t.reply_settings}`));
 
-          // Find first tweet that is open to everyone and has no link
+          // Find first tweet that is open to everyone with enough text content
           const latestTweet = tweets.find(t => {
             if (t.reply_settings !== 'everyone') return false;
-            if (t.text?.includes('t.co/') || t.text?.includes('http')) return false;
             if (t.created_at) {
               const d = new Date(t.created_at);
               if (isNaN(d.getTime()) || d < threeMonthsAgo) return false;
             }
+            // Strip links and check remaining text length
+            const textWithoutLinks = (t.text || '').replace(/https?:\/\/\S+/g, '').trim();
+            if (textWithoutLinks.length < 30) return false; // skip link-only tweets
             return true;
           });
 
@@ -205,11 +207,12 @@ export function createReplyGuyWorker(
           for (const t of tweets) {
             if (t.id === latestTweet.id) continue;
             if (t.reply_settings !== 'everyone') continue;
-            if (t.text?.includes('t.co/') || t.text?.includes('http')) continue;
             if (t.created_at) {
               const d = new Date(t.created_at);
               if (isNaN(d.getTime()) || d < threeMonthsAgo) continue;
             }
+            const textWithoutLinks = (t.text || '').replace(/https?:\/\/\S+/g, '').trim();
+            if (textWithoutLinks.length < 30) continue;
             tweetCache.push({
               userId,
               username,
