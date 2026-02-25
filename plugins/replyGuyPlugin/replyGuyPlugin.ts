@@ -16,6 +16,7 @@ interface CachedTweet {
   description: string;
   category: string;
   tweet: any;
+  replySettings?: string;
 }
 
 const accountCache: Map<string, CachedAccount> = new Map();
@@ -57,6 +58,12 @@ interface TargetAccount {
 
 interface TargetAccountsFile {
   all: TargetAccount[];
+}
+
+export function clearTweetCache(): void {
+  tweetCache.length = 0;
+  lastFullScanTime = 0;
+  console.log('🗑️ Tweet cache cleared, next call will trigger fresh scan');
 }
 
 export function createReplyGuyWorker(
@@ -115,8 +122,15 @@ export function createReplyGuyWorker(
     executable: async (args: {category?: string}, logger?: ((msg: string) => void) | null) => {
       try {
         // Check cache first
-        if (tweetCache.length > 0) {
+        while (tweetCache.length > 0) {
           const cachedTweet = tweetCache.shift()!;
+          
+          // Skip restricted tweets that slipped into cache before fix
+          if (cachedTweet.replySettings && cachedTweet.replySettings !== 'everyone') {
+            console.log(`⏭️ Skipping cached restricted tweet from ${cachedTweet.username} (reply_settings: ${cachedTweet.replySettings})`);
+            continue;
+          }
+
           console.log(`✅ Using cached tweet for ${cachedTweet.username} (${tweetCache.length} remaining)`);
           
           return new ExecutableGameFunctionResponse(
@@ -216,7 +230,8 @@ export function createReplyGuyWorker(
                 handle: account.handle,
                 description: account.description || "Wellness and mindfulness account",
                 category: "all",
-                tweet: latestTweet
+                tweet: latestTweet,
+                replySettings: latestTweet.reply_settings || 'everyone'
               });
 
             } catch (err: any) {

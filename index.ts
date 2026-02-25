@@ -2,6 +2,7 @@ import * as http from 'node:http';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
+import { clearTweetCache } from './plugins/replyGuyPlugin/replyGuyPlugin';
 
 const REPLIES_PER_DAY_TARGET = 85;
 const REPLY_INTERVAL = 17 * 60 * 1000; // 17 minutes
@@ -222,8 +223,9 @@ Timing:
   }
 
   if (request.url === '/clear-cache') {
+    clearTweetCache();
     response.writeHead(200, {'Content-Type': 'text/plain'});
-    response.end('Cache cleared');
+    response.end('Tweet cache cleared. Next reply will trigger a fresh scan.');
     return;
   }
 
