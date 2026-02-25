@@ -125,9 +125,10 @@ export function createReplyGuyWorker(
         while (tweetCache.length > 0) {
           const cachedTweet = tweetCache.shift()!;
           
-          // Skip restricted tweets that slipped into cache before fix
-          if (cachedTweet.replySettings && cachedTweet.replySettings !== 'everyone') {
-            console.log(`⏭️ Skipping cached restricted tweet from ${cachedTweet.username} (reply_settings: ${cachedTweet.replySettings})`);
+          // Only allow tweets explicitly open to everyone
+          console.log(`🔍 Tweet from ${cachedTweet.username} reply_settings: ${cachedTweet.replySettings}`);
+          if (cachedTweet.replySettings !== 'everyone') {
+            console.log(`⏭️ Skipping restricted tweet from ${cachedTweet.username} (reply_settings: ${cachedTweet.replySettings})`);
             continue;
           }
 
@@ -203,10 +204,14 @@ export function createReplyGuyWorker(
               if (!tweetsResponse.data?.data || tweetsResponse.data.data.length === 0) continue;
 
               // Find first tweet that allows everyone to reply
+              console.log(`🔍 Tweets for ${username}:`, tweetsResponse.data.data.map(t => `${t.id}:${t.reply_settings}`));
               const latestTweet = tweetsResponse.data.data.find(
-                t => !t.reply_settings || t.reply_settings === 'everyone'
+                t => t.reply_settings === 'everyone'
               );
-              if (!latestTweet) continue;
+              if (!latestTweet) {
+                console.log(`⏭️ No open-reply tweets for ${username}, skipping`);
+                continue;
+              }
 
               // Skip already replied tweets
               if (repliedTweetIds.has(latestTweet.id)) continue;
