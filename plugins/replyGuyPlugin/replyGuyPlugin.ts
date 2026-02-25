@@ -16,40 +16,12 @@ interface CachedTweet {
   description: string;
   category: string;
   tweet: any;
-  replySettings?: string;
+  replySettings: string;
 }
 
 const accountCache: Map<string, CachedAccount> = new Map();
 const tweetCache: CachedTweet[] = [];
 const CACHE_TTL = 24 * 60 * 60 * 1000;
-
-const FULL_SCAN_INTERVAL = 24 * 60 * 60 * 1000; // once per day
-let lastFullScanTime = 0;
-
-const REPLIED_TWEETS_FILE = path.resolve(process.cwd(), 'data/replied_tweets.json');
-let repliedTweetIds: Set<string> = new Set();
-
-function loadRepliedTweets(): void {
-  try {
-    if (fs.existsSync(REPLIED_TWEETS_FILE)) {
-      const data = JSON.parse(fs.readFileSync(REPLIED_TWEETS_FILE, 'utf8'));
-      repliedTweetIds = new Set(Array.isArray(data) ? data : []);
-      console.log(`📂 Loaded ${repliedTweetIds.size} replied tweet IDs`);
-    }
-  } catch (err) {
-    console.log('⚠️ Could not load replied tweets file');
-  }
-}
-
-function saveRepliedTweets(): void {
-  try {
-    const dir = path.dirname(REPLIED_TWEETS_FILE);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(REPLIED_TWEETS_FILE, JSON.stringify(Array.from(repliedTweetIds), null, 2));
-  } catch (err) {
-    console.log('⚠️ Could not save replied tweets file');
-  }
-}
 
 interface TargetAccount {
   handle: string;
@@ -62,8 +34,7 @@ interface TargetAccountsFile {
 
 export function clearTweetCache(): void {
   tweetCache.length = 0;
-  lastFullScanTime = 0;
-  console.log('🗑️ Tweet cache cleared, next call will trigger fresh scan');
+  console.log('🗑️ Tweet cache cleared');
 }
 
 export function createReplyGuyWorker(
@@ -78,8 +49,6 @@ export function createReplyGuyWorker(
     accessToken: accessToken,
     accessSecret: accessSecret,
   });
-
-  loadRepliedTweets();
 
   function containsHashtags(text?: string): boolean {
     return Boolean(text && text.includes('#'));
@@ -121,19 +90,14 @@ export function createReplyGuyWorker(
     
     executable: async (args: {category?: string}, logger?: ((msg: string) => void) | null) => {
       try {
-        // Check cache first
+        // Serve from cache, skipping restricted tweets
         while (tweetCache.length > 0) {
           const cachedTweet = tweetCache.shift()!;
-          
-          // Only allow tweets explicitly open to everyone
-          console.log(`🔍 Tweet from ${cachedTweet.username} reply_settings: ${cachedTweet.replySettings}`);
           if (cachedTweet.replySettings !== 'everyone') {
-            console.log(`⏭️ Skipping restricted tweet from ${cachedTweet.username} (reply_settings: ${cachedTweet.replySettings})`);
+            console.log(`⏭️ Skipping cached restricted tweet from ${cachedTweet.username} (reply_settings: ${cachedTweet.replySettings})`);
             continue;
           }
-
           console.log(`✅ Using cached tweet for ${cachedTweet.username} (${tweetCache.length} remaining)`);
-          
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Done,
             JSON.stringify({
@@ -173,105 +137,113 @@ export function createReplyGuyWorker(
           );
         }
 
-        const now = Date.now();
+        const randomAccount = accounts[Math.floor(Math.random() * accounts.length)];
+        if (logger) logger(`Selected account: ${randomAccount.handle}`);
+        console.log(`🎯 Selected target account: ${randomAccount.handle}`);
 
-        // Only perform full scan once per day
-        if (now - lastFullScanTime < FULL_SCAN_INTERVAL) {
-          console.log("⏳ Full scan already performed in last 24h. Using cache only.");
-        } else {
-          console.log(`🔎 Performing DAILY full scan of ${accounts.length} target accounts`);
-          lastFullScanTime = now;
+        // Trim to fix trailing space issues (e.g. "fmfclips ")
+        const username = randomAccount.handle.replace('@', '').trim();
 
+        if (username.length === 0 || username.length > 15) {
+          console.log(`⚠️ Invalid username: "${username}"`);
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Failed,
+            `Invalid username: ${username}`
+          );
+        }
+        
+        try {
+          const userId = await getUserId(username);
+          if (!userId) {
+            return new ExecutableGameFunctionResponse(
+              ExecutableGameFunctionStatus.Failed,
+              `Could not find user: ${username}`
+            );
+          }
+          
+          console.log(`📥 Fetching tweets for ${username}`);
+          const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
+            max_results: 5,
+            "tweet.fields": ["created_at", "text", "reply_settings"],
+            exclude: ["retweets", "replies"]
+          });
+          
+          if (!tweetsResponse.data?.data || tweetsResponse.data.data.length === 0) {
+            return new ExecutableGameFunctionResponse(
+              ExecutableGameFunctionStatus.Failed,
+              `No tweets found: ${username}`
+            );
+          }
+          
+          const tweets = tweetsResponse.data.data;
           const threeMonthsAgo = new Date();
           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
-          for (const account of accounts) {
-            // Trim whitespace to prevent invalid username errors (e.g. "fmfclips ")
-            const username = account.handle.replace('@', '').trim();
+          console.log(`🔍 reply_settings for ${username}:`, tweets.map(t => `${t.id}:${t.reply_settings}`));
 
-            if (username.length === 0 || username.length > 15) continue;
-
-            const userId = await getUserId(username);
-            if (!userId) continue;
-
-            try {
-              const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
-                max_results: 5,
-                "tweet.fields": ["created_at", "text", "reply_settings"],
-                exclude: ["retweets", "replies"]
-              });
-
-              if (!tweetsResponse.data?.data || tweetsResponse.data.data.length === 0) continue;
-
-              // Find first tweet that allows everyone to reply
-              console.log(`🔍 Tweets for ${username}:`, tweetsResponse.data.data.map(t => `${t.id}:${t.reply_settings}`));
-              const latestTweet = tweetsResponse.data.data.find(
-                t => t.reply_settings === 'everyone'
-              );
-              if (!latestTweet) {
-                console.log(`⏭️ No open-reply tweets for ${username}, skipping`);
-                continue;
-              }
-
-              // Skip already replied tweets
-              if (repliedTweetIds.has(latestTweet.id)) continue;
-
-              if (latestTweet.created_at) {
-                const tweetDate = new Date(latestTweet.created_at);
-                if (isNaN(tweetDate.getTime()) || tweetDate < threeMonthsAgo) continue;
-              }
-
-              const hasLink = latestTweet.text && (
-                latestTweet.text.includes('http://') ||
-                latestTweet.text.includes('https://') ||
-                latestTweet.text.includes('t.co/')
-              );
-
-              if (hasLink) continue;
-
-              tweetCache.push({
-                userId: userId,
-                username: username,
-                handle: account.handle,
-                description: account.description || "Wellness and mindfulness account",
-                category: "all",
-                tweet: latestTweet,
-                replySettings: latestTweet.reply_settings || 'everyone'
-              });
-
-            } catch (err: any) {
-              console.log(`⚠️ Error scanning ${username}: [${err?.code || err?.status || 'unknown'}] ${err?.message || JSON.stringify(err)}`);
-              if (err?.data) console.log(`   → API response:`, JSON.stringify(err.data));
-              if (err?.rateLimit) console.log(`   → Rate limit: reset at ${new Date((err.rateLimit.reset || 0) * 1000).toISOString()}`);
-              continue;
+          // Find first tweet that is open to everyone and has no link
+          const latestTweet = tweets.find(t => {
+            if (t.reply_settings !== 'everyone') return false;
+            if (t.text?.includes('t.co/') || t.text?.includes('http')) return false;
+            if (t.created_at) {
+              const d = new Date(t.created_at);
+              if (isNaN(d.getTime()) || d < threeMonthsAgo) return false;
             }
+            return true;
+          });
+
+          if (!latestTweet) {
+            console.log(`⏭️ No eligible tweets for ${username}`);
+            return new ExecutableGameFunctionResponse(
+              ExecutableGameFunctionStatus.Failed,
+              `No eligible tweets for ${username}`
+            );
           }
 
-          console.log(`📦 Daily scan complete. Cached ${tweetCache.length} tweets.`);
-        }
-
-        if (tweetCache.length === 0) {
+          // Cache remaining eligible tweets
+          let cachedCount = 0;
+          for (const t of tweets) {
+            if (t.id === latestTweet.id) continue;
+            if (t.reply_settings !== 'everyone') continue;
+            if (t.text?.includes('t.co/') || t.text?.includes('http')) continue;
+            if (t.created_at) {
+              const d = new Date(t.created_at);
+              if (isNaN(d.getTime()) || d < threeMonthsAgo) continue;
+            }
+            tweetCache.push({
+              userId,
+              username,
+              handle: randomAccount.handle,
+              description: randomAccount.description || "Wellness and mindfulness account",
+              category: "all",
+              tweet: t,
+              replySettings: t.reply_settings || 'everyone'
+            });
+            cachedCount++;
+          }
+          console.log(`💾 Cached ${cachedCount} additional tweets (${tweetCache.length} total)`);
+          
+          return new ExecutableGameFunctionResponse(
+            ExecutableGameFunctionStatus.Done,
+            JSON.stringify({
+              handle: randomAccount.handle,
+              username,
+              description: randomAccount.description || "Wellness and mindfulness account",
+              category: "all",
+              tweet_id: latestTweet.id,
+              tweet_text: latestTweet.text,
+              tweet_created_at: latestTweet.created_at || "unknown"
+            })
+          );
+          
+        } catch (error: any) {
+          console.error(`Error fetching tweets for ${username}:`, error.message);
+          if (error.data) console.error('   → API response:', JSON.stringify(error.data));
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
-            "No recent tweets found across target accounts."
+            `Error: ${error.message}`
           );
         }
-
-        const nextTweet = tweetCache.shift()!;
-
-        return new ExecutableGameFunctionResponse(
-          ExecutableGameFunctionStatus.Done,
-          JSON.stringify({
-            handle: nextTweet.handle,
-            username: nextTweet.username,
-            description: nextTweet.description,
-            category: nextTweet.category,
-            tweet_id: nextTweet.tweet.id,
-            tweet_text: nextTweet.tweet.text,
-            tweet_created_at: nextTweet.tweet.created_at || "unknown"
-          })
-        );
-          
       } catch (error: any) {
         console.error('Error in find_target_account:', error);
         return new ExecutableGameFunctionResponse(
@@ -314,7 +286,7 @@ export function createReplyGuyWorker(
           );
         }
 
-        if (reply_text && (
+        if (
           reply_text.includes('generate_and_tweet(') || 
           reply_text.includes('generate_image(') || 
           reply_text.includes('upload_image_and_tweet(') ||
@@ -327,7 +299,7 @@ export function createReplyGuyWorker(
           reply_text.length < 10 ||
           /^[a-z_]+$/.test(reply_text) ||
           /^[a-zA-Z_]+\(['"].+['"]\)/.test(reply_text)
-        )) {
+        ) {
           console.log("⚠️ Invalid reply content detected:", reply_text);
           return new ExecutableGameFunctionResponse(
             ExecutableGameFunctionStatus.Failed,
@@ -337,16 +309,13 @@ export function createReplyGuyWorker(
         
         console.log(`📝 Replying to tweet ${tweet_id} with: ${reply_text}`);
         if (logger) logger(`Replying to tweet ${tweet_id}`);
-        
+
         let replyResponse;
         try {
           replyResponse = await twitterClient.v2.reply(reply_text, tweet_id);
         } catch (replyError: any) {
-          // 403 restricted reply — mark as done so we never retry
           if (replyError?.code === 403) {
-            console.log(`⏭️ Tweet ${tweet_id} has restricted replies, marking as seen`);
-            repliedTweetIds.add(tweet_id);
-            saveRepliedTweets();
+            console.log(`⏭️ Tweet ${tweet_id} has restricted replies`);
             return new ExecutableGameFunctionResponse(
               ExecutableGameFunctionStatus.Failed,
               `403 Reply restricted: ${replyError.message}`
@@ -363,8 +332,6 @@ export function createReplyGuyWorker(
         }
         
         console.log("✅ Reply posted successfully with ID:", replyResponse.data.id);
-        repliedTweetIds.add(tweet_id);
-        saveRepliedTweets();
         if (logger) logger(`Reply posted successfully with ID: ${replyResponse.data.id}`);
         
         return new ExecutableGameFunctionResponse(
@@ -392,26 +359,16 @@ export function createReplyGuyWorker(
     executable: async (args: {category?: string, check_interval?: number}, logger?: ((msg: string) => void) | null) => {
       try {
         const { category = "random", check_interval = 15 } = args;
-
         console.log(`🔄 Setting up automatic monitoring for category: ${category}`);
-        console.log(`⏰ Check interval: ${check_interval} minutes`);
-        
         if (logger) logger(`Set up automatic reply monitoring for ${category} accounts`);
-        
         return new ExecutableGameFunctionResponse(
           ExecutableGameFunctionStatus.Done,
-          JSON.stringify({
-            category: category,
-            check_interval_minutes: check_interval,
-            monitor_active: true
-          })
+          JSON.stringify({ category, check_interval_minutes: check_interval, monitor_active: true })
         );
-        
       } catch (error: any) {
-        console.error('Error setting up monitoring:', error);
         return new ExecutableGameFunctionResponse(
           ExecutableGameFunctionStatus.Failed,
-          `Error setting up monitoring: ${error.message}`
+          `Error: ${error.message}`
         );
       }
     }

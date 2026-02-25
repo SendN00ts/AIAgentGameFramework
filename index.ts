@@ -21,17 +21,10 @@ const STATE_FILE = '/app/data/reply_state.json';
 function saveState() {
   try {
     const dir = path.dirname(STATE_FILE);
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
-    }
-    
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(STATE_FILE, JSON.stringify({
-      lastReplyTime,
-      dailyReplies,
-      lastResetDate,
-      dailyReadAttempts
+      lastReplyTime, dailyReplies, lastResetDate, dailyReadAttempts
     }, null, 2));
-    
     console.log('💾 State saved');
   } catch (error) {
     console.error('Error saving state:', error);
@@ -46,11 +39,7 @@ function loadState() {
       dailyReplies = state.dailyReplies || 0;
       lastResetDate = state.lastResetDate || '';
       dailyReadAttempts = state.dailyReadAttempts || 0;
-      
-      console.log('✅ State loaded:', {
-        dailyReplies,
-        dailyReadAttempts
-      });
+      console.log('✅ State loaded:', { dailyReplies, dailyReadAttempts });
     }
   } catch (error) {
     console.error('Error loading state:', error);
@@ -71,14 +60,13 @@ function resetDailyCounterIfNeeded(): void {
 function handleTwitterError(error: any): void {
   if (error.code === 429 && error.data) {
     const { title, detail, type } = error.data;
-    
-    if (title === 'UsageCapExceeded' &&
-        detail?.includes('Monthly product cap') &&
-        type === 'https://api.twitter.com/2/problems/usage-capped') {
-      
+    if (
+      title === 'UsageCapExceeded' &&
+      detail?.includes('Monthly product cap') &&
+      type === 'https://api.twitter.com/2/problems/usage-capped'
+    ) {
       monthlyCapExceeded = true;
       monthlyCapResetTime = error.rateLimit?.reset || 0;
-      
       const resetDate = new Date(monthlyCapResetTime * 1000);
       console.log(`🚫 MONTHLY CAP EXCEEDED! No more read operations until: ${resetDate.toISOString()}`);
     }
@@ -87,24 +75,20 @@ function handleTwitterError(error: any): void {
 
 function canMakeReadRequest(): boolean {
   resetDailyCounterIfNeeded();
-  
   if (monthlyCapExceeded) {
     const currentTime = Math.floor(Date.now() / 1000);
     if (currentTime < monthlyCapResetTime) {
       console.log(`🚫 Monthly cap exceeded. Cannot make read requests.`);
       return false;
-    } else {
-      monthlyCapExceeded = false;
-      monthlyCapResetTime = 0;
-      console.log(`✅ Monthly cap reset! Read operations allowed.`);
     }
+    monthlyCapExceeded = false;
+    monthlyCapResetTime = 0;
+    console.log(`✅ Monthly cap reset! Read operations allowed.`);
   }
-  
   if (dailyReadAttempts >= maxDailyReadAttempts) {
     console.log(`⚠️ Daily read limit reached (${maxDailyReadAttempts}).`);
     return false;
   }
-  
   return true;
 }
 
@@ -119,41 +103,37 @@ function incrementReplyCount(): void {
   saveState();
 }
 
-async function attemptReply(): Promise<void> {
+async function attemptReply(force: boolean = false): Promise<void> {
   const now = Date.now();
   const timeSinceLastReply = now - lastReplyTime;
-  
-  if (timeSinceLastReply < REPLY_INTERVAL) {
+
+  if (!force && timeSinceLastReply < REPLY_INTERVAL) {
     const minutesRemaining = Math.round((REPLY_INTERVAL - timeSinceLastReply) / 60000);
     console.log(`⏰ Next reply in ${minutesRemaining} minutes`);
     return;
   }
-  
+
   if (dailyReplies >= REPLIES_PER_DAY_TARGET) {
     console.log(`✅ Daily reply target reached (${dailyReplies}/${REPLIES_PER_DAY_TARGET})`);
     return;
   }
-  
+
   if (!canMakeReadRequest()) {
     console.log("⚠️ Cannot make read request due to rate limits");
     return;
   }
-  
-  console.log(`📨 Time for reply (${dailyReplies}/${REPLIES_PER_DAY_TARGET} today)`);
-  
-  incrementReadAttempts();
-  
-  try {
-    // startMonitoring now returns a boolean when intervalMinutes === 0
-    const success = await replyManager.startMonitoring('random', 0) as boolean;
 
+  console.log(`📨 Time for reply (${dailyReplies}/${REPLIES_PER_DAY_TARGET} today)`);
+  incrementReadAttempts();
+
+  try {
+    const success = await replyManager.startMonitoring('random', 0) as boolean;
     if (success) {
       incrementReplyCount();
       lastReplyTime = Date.now();
       console.log("✅ Reply posted successfully!");
     } else {
-      console.log("⚠️ No reply was posted (no valid tweet found or reply failed). Counter not incremented.");
-      // Still update lastReplyTime to avoid hammering the API on every scheduler tick
+      console.log("⚠️ No reply was posted. Counter not incremented.");
       lastReplyTime = Date.now();
     }
   } catch (error: any) {
@@ -163,10 +143,11 @@ async function attemptReply(): Promise<void> {
 }
 
 const server = http.createServer((request, response) => {
-  if (request.url === '/') {
+  const url = request.url || '';
+
+  if (url === '/') {
     const minutesSinceReply = Math.round((Date.now() - lastReplyTime) / 60000);
     const minutesUntilNext = Math.max(0, Math.round((REPLY_INTERVAL - (Date.now() - lastReplyTime)) / 60000));
-    
     response.writeHead(200, {'Content-Type': 'text/plain'});
     response.end(`AIleen Reply Agent
 
@@ -188,32 +169,23 @@ Timing:
 `);
     return;
   }
-  
-  if (request.url === '/reply' || request.url === '/reply?force=true') {
-    const force = request.url.includes('force=true');
-    const originalLastReplyTime = lastReplyTime;
-    if (force) {
-      console.log('⚡ Force reply triggered via HTTP');
-      lastReplyTime = 0; // bypass interval check
-    }
-    attemptReply()
+
+  if (url === '/reply' || url === '/reply?force=true') {
+    const force = url.includes('force=true');
+    if (force) console.log('⚡ Force reply triggered via HTTP');
+    attemptReply(force)
       .then(() => {
-        if (force && lastReplyTime === 0) {
-          // restore if nothing was posted (attemptReply didn't update it)
-          lastReplyTime = originalLastReplyTime;
-        }
         response.writeHead(200, {'Content-Type': 'text/plain'});
         response.end(force ? 'Force reply attempt completed' : 'Reply attempt completed');
       })
       .catch(err => {
-        if (force) lastReplyTime = originalLastReplyTime;
         response.writeHead(500, {'Content-Type': 'text/plain'});
         response.end('Error: ' + err.message);
       });
     return;
   }
-  
-  if (request.url === '/reset') {
+
+  if (url === '/reset') {
     dailyReplies = 0;
     dailyReadAttempts = 0;
     saveState();
@@ -222,14 +194,14 @@ Timing:
     return;
   }
 
-  if (request.url === '/clear-cache') {
+  if (url === '/clear-cache') {
     clearTweetCache();
     response.writeHead(200, {'Content-Type': 'text/plain'});
-    response.end('Tweet cache cleared. Next reply will trigger a fresh scan.');
+    response.end('Tweet cache cleared. Next reply will fetch fresh tweets.');
     return;
   }
 
-  if (request.url === '/skipped') {
+  if (url === '/skipped') {
     try {
       if (fs.existsSync('/app/data/skipped_accounts.json')) {
         const skipLog = fs.readFileSync('/app/data/skipped_accounts.json', 'utf8');
@@ -246,25 +218,20 @@ Timing:
     return;
   }
 
-  if (request.url === '/reset-skipped') {
+  if (url === '/reset-skipped') {
     const skipFilePath = '/app/data/skipped_accounts.json';
-    
     if (fs.existsSync(skipFilePath)) {
       fs.unlinkSync(skipFilePath);
       console.log('✅ Skipped accounts log cleared');
-    } else {
-      console.log('⚠️ No skipped accounts log found');
     }
-
     response.writeHead(200, {'Content-Type': 'text/plain'});
     response.end('Skipped accounts reset');
     return;
   }
-  
+
   response.writeHead(404, {'Content-Type': 'text/plain'});
   response.end('Not found');
 });
-
 
 async function runScheduler(): Promise<void> {
   try {
@@ -272,7 +239,6 @@ async function runScheduler(): Promise<void> {
   } catch (error) {
     console.error("❌ Scheduler error:", error);
   }
-  
   setTimeout(runScheduler, 5 * 60 * 1000);
 }
 
@@ -280,14 +246,14 @@ async function main(): Promise<void> {
   console.log("=========================================");
   console.log("🚀 AIleen Reply Agent Starting...");
   console.log("=========================================");
-  
+
   loadState();
-  
+
   console.log("Environment check:");
   console.log("- API_KEY:", !!process.env.API_KEY ? "✅" : "❌");
   console.log("- TWITTER_API_KEY:", !!process.env.TWITTER_API_KEY ? "✅" : "❌");
   console.log(`\n📊 Config: ${REPLIES_PER_DAY_TARGET} replies/day (every ${REPLY_INTERVAL / 60000} minutes)\n`);
-  
+
   try {
     console.log("Initializing reply manager...");
     await replyManager.initialize();
@@ -296,15 +262,15 @@ async function main(): Promise<void> {
     console.error("❌ Failed to initialize:", error);
     process.exit(1);
   }
-  
+
   const PORT = process.env.PORT || 3000;
   server.listen(PORT, () => {
     console.log(`🌐 HTTP server listening on port ${PORT}`);
   });
-  
+
   console.log("⏰ Starting scheduler...");
   runScheduler();
-  
+
   console.log("✅ Reply agent running!");
 }
 
