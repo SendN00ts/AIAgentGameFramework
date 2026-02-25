@@ -90,7 +90,6 @@ export function createReplyGuyWorker(
     
     executable: async (args: {category?: string}, logger?: ((msg: string) => void) | null) => {
       try {
-        // Serve from cache, skipping restricted tweets
         while (tweetCache.length > 0) {
           const cachedTweet = tweetCache.shift()!;
           if (cachedTweet.replySettings !== 'everyone') {
