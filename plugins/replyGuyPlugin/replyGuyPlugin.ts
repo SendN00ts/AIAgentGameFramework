@@ -171,20 +171,22 @@ export function createReplyGuyWorker(
           threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
 
           for (const account of accounts) {
-            const username = account.handle.replace('@', '');
+            // Trim whitespace to prevent invalid username errors (e.g. "fmfclips ")
+            const username = account.handle.replace('@', '').trim();
 
-            if (username.length > 15) continue;
+            if (username.length === 0 || username.length > 15) continue;
 
             const userId = await getUserId(username);
             if (!userId) continue;
 
             try {
               const tweetsResponse = await twitterClient.v2.userTimeline(userId, {
-                max_results: 1,
-                "tweet.fields": ["created_at", "text"]
+                max_results: 5,
+                "tweet.fields": ["created_at", "text"],
+                exclude: ["retweets", "replies"]
               });
 
-              if (!tweetsResponse.data || tweetsResponse.data.data.length === 0) continue;
+              if (!tweetsResponse.data?.data || tweetsResponse.data.data.length === 0) continue;
 
               const latestTweet = tweetsResponse.data.data[0];
 
@@ -213,8 +215,10 @@ export function createReplyGuyWorker(
                 tweet: latestTweet
               });
 
-            } catch (err) {
-              console.log(`⚠️ Error scanning ${username}, skipping`);
+            } catch (err: any) {
+              console.log(`⚠️ Error scanning ${username}: [${err?.code || err?.status || 'unknown'}] ${err?.message || JSON.stringify(err)}`);
+              if (err?.data) console.log(`   → API response:`, JSON.stringify(err.data));
+              if (err?.rateLimit) console.log(`   → Rate limit: reset at ${new Date((err.rateLimit.reset || 0) * 1000).toISOString()}`);
               continue;
             }
           }
