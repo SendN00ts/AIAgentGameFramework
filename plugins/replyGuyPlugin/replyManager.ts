@@ -10,9 +10,7 @@ dotenv.config();
 const REPLY_FILE_PATH = '/app/data/replied_tweets.json';
 let repliedTweets: Record<string, number> = {};
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY!
-});
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY! });
 
 const twitterClient = new TwitterApi({
   appKey: process.env.TWITTER_API_KEY!,
@@ -56,7 +54,6 @@ function saveRepliedTweets() {
 
 function shouldSkipTweet(tweet: any): boolean {
   const text = tweet.text?.toLowerCase() || '';
-  
   const filteredKeywords = [
     // Political
     'trump', 'biden', 'election', 'vote', 'congress', 'senate', 'democrat', 'republican', 'politics', 'political',
@@ -69,24 +66,21 @@ function shouldSkipTweet(tweet: any): boolean {
     'suicide', 'self-harm', 'overdose', 'death', 'murder', 'shooting', 'war', 'genocide',
     'racist', 'racism', 'discrimination', 'hate crime'
   ];
-  
   const matched = filteredKeywords.find(keyword => text.includes(keyword));
   if (matched) {
     console.log(`⏭️ Skipping tweet (filtered: "${matched}"): ${tweet.id}`);
     return true;
   }
-  
   return false;
 }
 
 async function findAndReply(category: string = 'random'): Promise<boolean> {
   console.log(`⏱️ Running scheduled reply check for category: ${category}`);
-  
   try {
     const findResult = await replyGuyWorker.functions
       .find(f => f.name === 'find_target_account')
       ?.executable({ category }, (msg: string) => console.log(`[Find Account] ${msg}`));
-    
+
     if (!findResult || findResult.status !== 'done') {
       console.error('Failed to find target account:', findResult?.feedback || 'Unknown error');
       return false;
@@ -94,23 +88,24 @@ async function findAndReply(category: string = 'random'): Promise<boolean> {
 
     const accountInfo = JSON.parse(findResult.feedback);
     console.log(`Found account: ${accountInfo.handle} with tweet: ${accountInfo.tweet_id}`);
-    
+
     if (repliedTweets[accountInfo.tweet_id]) {
       console.log(`Already replied to tweet ${accountInfo.tweet_id}, skipping`);
       return false;
     }
 
-    // Fetch tweet to check content
     const tweetData = await twitterClient.v2.singleTweet(accountInfo.tweet_id, {
       'tweet.fields': ['text']
     });
-    
+
+    console.log(`📄 Tweet text: "${tweetData.data?.text}"`);
+
     if (shouldSkipTweet(tweetData.data)) {
       return false;
     }
-    
+
     console.log('Generating reply content with OpenAI...');
-    
+
     try {
       const response = await openai.chat.completions.create({
         model: "gpt-4o",
@@ -131,8 +126,8 @@ IMPORTANT:
       let replyContent = response.choices[0].message.content?.trim() || '';
       console.log('OpenAI response:', replyContent);
 
-      if (replyContent === "go_to" || 
-          replyContent === "wait" || 
+      if (replyContent === "go_to" ||
+          replyContent === "wait" ||
           replyContent === "call_function" ||
           replyContent.length < 10 ||
           replyContent.includes('reply_tweet(') ||
@@ -159,16 +154,16 @@ IMPORTANT:
 
       const replyResult = await replyGuyWorker.functions
         .find(f => f.name === 'reply_tweet')
-        ?.executable({ 
+        ?.executable({
           tweet_id: accountInfo.tweet_id,
           reply_text: replyContent
         }, (msg: string) => console.log(`[Reply Tweet] ${msg}`));
-      
+
       if (!replyResult || replyResult.status !== 'done') {
         const feedback = replyResult?.feedback || 'Unknown error';
-        // 403 restricted — mark tweet as seen so we never retry it
+        // 403 restricted — mark as seen so we never retry
         if (feedback.includes('403')) {
-          console.log(`⏭️ Tweet ${accountInfo.tweet_id} restricted, marking as seen and skipping`);
+          console.log(`⏭️ Tweet ${accountInfo.tweet_id} restricted, marking as seen`);
           repliedTweets[accountInfo.tweet_id] = Date.now();
           saveRepliedTweets();
         } else {
@@ -176,17 +171,17 @@ IMPORTANT:
         }
         return false;
       }
-      
+
       console.log('Reply posted successfully:', replyResult.feedback);
       repliedTweets[accountInfo.tweet_id] = Date.now();
       saveRepliedTweets();
       return true;
-      
+
     } catch (error) {
       console.error('Error generating or posting reply:', error);
       return false;
     }
-    
+
   } catch (error) {
     console.error('Error in find and reply process:', error);
     return false;
@@ -199,14 +194,10 @@ export async function startMonitoring(category: string = 'random', intervalMinut
     loadRepliedTweets();
     return findAndReply(category);
   }
-  
   console.log(`🔄 Starting monitoring for category: ${category} every ${intervalMinutes} minutes`);
   loadRepliedTweets();
   findAndReply(category);
-  
-  return setInterval(() => {
-    findAndReply(category);
-  }, intervalMinutes * 60 * 1000);
+  return setInterval(() => { findAndReply(category); }, intervalMinutes * 60 * 1000);
 }
 
 export async function initializeReplyManager() {

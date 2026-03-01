@@ -4,8 +4,8 @@ import * as path from 'node:path';
 import { replyManager } from './plugins/replyGuyPlugin/replyManager';
 import { clearTweetCache } from './plugins/replyGuyPlugin/replyGuyPlugin';
 
-const REPLIES_PER_DAY_TARGET = 85;
-const REPLY_INTERVAL = 17 * 60 * 1000; // 17 minutes
+const REPLIES_PER_DAY_TARGET = 30; // reduced from 85 to avoid spam detection
+const REPLY_INTERVAL = 30 * 60 * 1000; // 30 minutes between replies
 
 let lastReplyTime = 0;
 let dailyReplies = 0;
@@ -67,8 +67,7 @@ function handleTwitterError(error: any): void {
     ) {
       monthlyCapExceeded = true;
       monthlyCapResetTime = error.rateLimit?.reset || 0;
-      const resetDate = new Date(monthlyCapResetTime * 1000);
-      console.log(`🚫 MONTHLY CAP EXCEEDED! No more read operations until: ${resetDate.toISOString()}`);
+      console.log(`🚫 MONTHLY CAP EXCEEDED! Until: ${new Date(monthlyCapResetTime * 1000).toISOString()}`);
     }
   }
 }
@@ -92,17 +91,6 @@ function canMakeReadRequest(): boolean {
   return true;
 }
 
-function incrementReadAttempts(): void {
-  dailyReadAttempts++;
-  console.log(`📊 Daily read attempts: ${dailyReadAttempts}/${maxDailyReadAttempts}`);
-}
-
-function incrementReplyCount(): void {
-  dailyReplies++;
-  console.log(`📨 Replies today: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}`);
-  saveState();
-}
-
 async function attemptReply(force: boolean = false): Promise<void> {
   const now = Date.now();
   const timeSinceLastReply = now - lastReplyTime;
@@ -124,13 +112,16 @@ async function attemptReply(force: boolean = false): Promise<void> {
   }
 
   console.log(`📨 Time for reply (${dailyReplies}/${REPLIES_PER_DAY_TARGET} today)`);
-  incrementReadAttempts();
+  dailyReadAttempts++;
+  console.log(`📊 Daily read attempts: ${dailyReadAttempts}/${maxDailyReadAttempts}`);
 
   try {
     const success = await replyManager.startMonitoring('random', 0) as boolean;
     if (success) {
-      incrementReplyCount();
+      dailyReplies++;
+      console.log(`📨 Replies today: ${dailyReplies}/${REPLIES_PER_DAY_TARGET}`);
       lastReplyTime = Date.now();
+      saveState();
       console.log("✅ Reply posted successfully!");
     } else {
       console.log("⚠️ No reply was posted. Counter not incremented.");
@@ -220,10 +211,7 @@ Timing:
 
   if (url === '/reset-skipped') {
     const skipFilePath = '/app/data/skipped_accounts.json';
-    if (fs.existsSync(skipFilePath)) {
-      fs.unlinkSync(skipFilePath);
-      console.log('✅ Skipped accounts log cleared');
-    }
+    if (fs.existsSync(skipFilePath)) fs.unlinkSync(skipFilePath);
     response.writeHead(200, {'Content-Type': 'text/plain'});
     response.end('Skipped accounts reset');
     return;
@@ -270,21 +258,10 @@ async function main(): Promise<void> {
 
   console.log("⏰ Starting scheduler...");
   runScheduler();
-
   console.log("✅ Reply agent running!");
 }
 
-process.on('uncaughtException', (err) => {
-  console.error('Uncaught exception:', err);
-  saveState();
-});
+process.on('uncaughtException', (err) => { console.error('Uncaught exception:', err); saveState(); });
+process.on('unhandledRejection', (reason) => { console.error('Unhandled rejection:', reason); saveState(); });
 
-process.on('unhandledRejection', (reason) => {
-  console.error('Unhandled rejection:', reason);
-  saveState();
-});
-
-main().catch(err => {
-  console.error("Fatal error:", err);
-  process.exit(1);
-});
+main().catch(err => { console.error("Fatal error:", err); process.exit(1); });
