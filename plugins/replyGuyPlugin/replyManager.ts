@@ -105,11 +105,9 @@ async function findAndReply(category: string = 'random'): Promise<boolean> {
       'tweet.fields': ['text']
     });
     
-   console.log(`📄 Tweet text: "${tweetData.data?.text}"`);
-if (shouldSkipTweet(tweetData.data)) {
-  return false;
-}
-console.log('✅ Tweet passed content filter');
+    if (shouldSkipTweet(tweetData.data)) {
+      return false;
+    }
     
     console.log('Generating reply content with OpenAI...');
     
@@ -167,7 +165,15 @@ IMPORTANT:
         }, (msg: string) => console.log(`[Reply Tweet] ${msg}`));
       
       if (!replyResult || replyResult.status !== 'done') {
-        console.error('Failed to post reply:', replyResult?.feedback || 'Unknown error');
+        const feedback = replyResult?.feedback || 'Unknown error';
+        // 403 restricted — mark tweet as seen so we never retry it
+        if (feedback.includes('403')) {
+          console.log(`⏭️ Tweet ${accountInfo.tweet_id} restricted, marking as seen and skipping`);
+          repliedTweets[accountInfo.tweet_id] = Date.now();
+          saveRepliedTweets();
+        } else {
+          console.error('Failed to post reply:', feedback);
+        }
         return false;
       }
       
